@@ -1,0 +1,1862 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trip Planner</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root {
+  --ink:#1a1a2e; --paper:#f5f0e8; --accent:#c1440e;
+  --muted:#8a7f72; --line:#d6cfc4; --green:#3d6b4f;
+  --amber:#a06000; --amber-bg:rgba(194,120,3,0.07);
+  --pool-bg:#ede8e0; --pool-border:#c8c0b4;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--paper);color:var(--ink);font-family:'DM Sans',sans-serif;min-height:100vh;padding:1.5rem 1.5rem 3rem;}
+.page{max-width:720px;margin:0 auto;}
+
+/* Trip bar */
+.trip-bar{display:flex;align-items:center;gap:0.6rem;border-bottom:2px solid var(--ink);padding-bottom:1rem;margin-bottom:1.5rem;flex-wrap:wrap;}
+.trip-bar h1{font-family:'Playfair Display',serif;font-size:1.5rem;flex-shrink:0;}
+.trip-select{font-family:'Playfair Display',serif;font-size:1rem;font-weight:700;color:var(--accent);background:none;border:1.5px solid var(--accent);border-radius:4px;padding:0.28rem 0.55rem;cursor:pointer;outline:none;}
+.top-btn{font-family:'DM Sans',sans-serif;font-size:0.7rem;color:var(--muted);background:none;border:1.5px solid var(--line);padding:0.22rem 0.65rem;border-radius:3px;cursor:pointer;letter-spacing:0.07em;text-transform:uppercase;white-space:nowrap;transition:border-color 0.15s,color 0.15s;}
+.top-btn:hover{border-color:var(--accent);color:var(--accent);}
+.top-btn.green:hover{border-color:var(--green);color:var(--green);}
+.ml-auto{margin-left:auto;}
+
+/* Tabs */
+.tab-bar{display:flex;border-bottom:2px solid var(--ink);margin-bottom:1.5rem;}
+.tab-btn{font-family:'Playfair Display',serif;font-size:0.95rem;font-weight:700;color:var(--muted);background:none;border:none;padding:0.5rem 1.1rem 0.6rem;cursor:pointer;transition:color 0.15s;border-bottom:2px solid transparent;margin-bottom:-2px;}
+.tab-btn:hover{color:var(--ink);}
+.tab-btn.active{color:var(--accent);border-bottom:2px solid var(--accent);}
+.tab-panel{display:none;}.tab-panel.active{display:block;}
+
+/* Progress */
+.progress-wrap{margin-bottom:1.8rem;}
+.progress-label{display:flex;justify-content:space-between;font-size:0.75rem;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:0.4rem;}
+.progress-label .frac{font-weight:500;color:var(--ink);}
+.progress-bar-bg{background:var(--line);height:6px;border-radius:3px;overflow:hidden;}
+.progress-bar-fill{height:100%;background:var(--green);border-radius:3px;transition:width 0.4s cubic-bezier(.4,0,.2,1);width:0%;}
+
+/* Grid */
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:1.8rem;}
+@media(max-width:520px){.grid{grid-template-columns:1fr;}}
+
+/* Category */
+.category,.section{break-inside:avoid;margin-bottom:0.2rem;}
+.category-header,.section-header{display:flex;align-items:center;gap:0.5rem;margin-bottom:0.6rem;}
+.cat-icon,.sec-icon{font-size:0.95rem;line-height:1;}
+.cat-title,.sec-title{font-family:'Playfair Display',serif;font-size:0.9rem;font-weight:700;letter-spacing:0.04em;color:var(--accent);text-transform:uppercase;}
+.cat-count,.sec-count{margin-left:auto;font-size:0.7rem;color:var(--muted);font-weight:500;min-width:2rem;text-align:right;}
+.add-btn{background:none;border:none;cursor:pointer;color:var(--muted);font-size:1.1rem;line-height:1;padding:0 0 0 0.3rem;transition:color 0.15s,transform 0.15s;flex-shrink:0;}
+.add-btn:hover{color:var(--accent);transform:scale(1.2);}
+.subcategory-label{font-size:0.68rem;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);padding:0.25rem 0 0.1rem;}
+
+/* List items */
+ul{list-style:none;border-left:1.5px solid var(--line);padding-left:1rem;}
+li{font-size:0.88rem;font-weight:300;color:var(--ink);padding:0.3rem 0.2rem;border-bottom:1px dotted var(--line);display:flex;align-items:center;gap:0.6rem;line-height:1.4;cursor:pointer;border-radius:3px;transition:background 0.15s;user-select:none;}
+li:last-child{border-bottom:none;}
+li:hover{background:rgba(0,0,0,0.03);}
+.cb{display:inline-block;width:14px;height:14px;min-width:14px;border:1.5px solid var(--muted);border-radius:2px;flex-shrink:0;position:relative;transition:background 0.15s,border-color 0.15s;}
+.cb::after{content:'';position:absolute;left:3px;top:0;width:5px;height:9px;border:2px solid white;border-top:none;border-left:none;transform:rotate(40deg) scale(0);transition:transform 0.15s cubic-bezier(.4,0,.2,1);}
+li.checked .cb{background:var(--green);border-color:var(--green);}
+li.checked .cb::after{transform:rotate(40deg) scale(1);}
+li.checked .item-text{text-decoration:line-through;color:var(--muted);}
+.item-text{transition:color 0.15s;flex:1;}
+li.dayof{background:var(--amber-bg);}
+li.dayof .item-text{color:var(--amber);}
+li.dayof .cb{border-color:#c27803;}
+li.dayof::before{content:'☀️';font-size:0.68rem;flex-shrink:0;}
+li.dayof.checked .item-text{color:var(--muted);}
+.custom-badge{font-size:0.6rem;font-weight:600;letter-spacing:0.05em;background:rgba(193,68,14,0.12);color:var(--accent);border-radius:3px;padding:0.1rem 0.3rem;flex-shrink:0;text-transform:uppercase;}
+
+/* Add row */
+.add-row{display:none;align-items:center;gap:0.5rem;padding:0.3rem 0.2rem;border-bottom:1px dotted var(--line);}
+.add-row.visible{display:flex;}
+.add-input{flex:1;font-family:'DM Sans',sans-serif;font-size:0.88rem;font-weight:300;background:none;border:none;border-bottom:1px solid var(--accent);outline:none;color:var(--ink);padding:0.1rem 0;}
+.add-confirm{font-size:0.75rem;background:none;border:none;cursor:pointer;color:var(--green);font-weight:500;padding:0.1rem 0.3rem;}
+.add-cancel{font-size:0.75rem;background:none;border:none;cursor:pointer;color:var(--muted);padding:0.1rem 0.3rem;}
+
+/* Pool section */
+.pool-section{margin-top:2.5rem;border-top:2px dashed var(--pool-border);padding-top:1.5rem;}
+.pool-header{display:flex;align-items:center;gap:0.6rem;margin-bottom:1.2rem;}
+.pool-header h3{font-family:'Playfair Display',serif;font-size:0.9rem;color:var(--muted);font-weight:700;letter-spacing:0.04em;text-transform:uppercase;}
+.pool-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.4rem;}
+@media(max-width:520px){.pool-grid{grid-template-columns:1fr;}}
+.pool-cat{break-inside:avoid;}
+.pool-cat-header{display:flex;align-items:center;gap:0.4rem;margin-bottom:0.5rem;}
+.pool-cat-icon{font-size:0.85rem;}
+.pool-cat-title{font-size:0.78rem;font-weight:500;color:var(--muted);letter-spacing:0.06em;text-transform:uppercase;}
+.pool-ul{list-style:none;border-left:1.5px dashed var(--pool-border);padding-left:0.9rem;}
+.pool-li{font-size:0.84rem;font-weight:300;color:var(--muted);padding:0.25rem 0.2rem;border-bottom:1px dotted var(--pool-border);display:flex;align-items:center;gap:0.5rem;cursor:default;border-radius:3px;transition:background 0.15s;user-select:none;}
+.pool-li:last-child{border-bottom:none;}
+.pool-li:hover{background:rgba(0,0,0,0.02);}
+.pool-source{font-size:0.62rem;color:var(--pool-border);background:rgba(0,0,0,0.04);border-radius:3px;padding:0.08rem 0.3rem;flex-shrink:0;}
+
+/* All done */
+.all-done{display:none;text-align:center;margin-top:1.5rem;padding:0.8rem;background:rgba(61,107,79,0.08);border:1px solid rgba(61,107,79,0.25);border-radius:6px;font-family:'Playfair Display',serif;color:var(--green);font-size:1rem;}
+
+/* Panel footer */
+.panel-footer{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;}
+.count{font-size:0.75rem;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;}
+.reset-btn{font-family:'DM Sans',sans-serif;font-size:0.72rem;color:var(--muted);background:none;border:1.5px solid var(--line);padding:0.25rem 0.7rem;border-radius:3px;cursor:pointer;letter-spacing:0.08em;text-transform:uppercase;transition:border-color 0.15s,color 0.15s;}
+.reset-btn:hover{border-color:var(--accent);color:var(--accent);}
+.section{margin-bottom:1.5rem;}
+
+/* Context menu */
+.ctx-menu{position:fixed;background:#fff;border:1px solid var(--line);border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,0.13);z-index:1000;overflow:hidden;min-width:170px;animation:ctxFade 0.1s ease;}
+@keyframes ctxFade{from{opacity:0;transform:scale(0.95)}to{opacity:1;transform:scale(1)}}
+.ctx-item{padding:0.55rem 1rem;font-size:0.82rem;cursor:pointer;color:var(--ink);display:flex;align-items:center;gap:0.5rem;transition:background 0.1s;}
+.ctx-item:hover{background:var(--paper);}
+.ctx-item.danger{color:var(--accent);}
+.ctx-divider{height:1px;background:var(--line);margin:0.2rem 0;}
+
+/* Modals shared */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.38);z-index:2000;align-items:center;justify-content:center;padding:1.5rem;}
+.overlay.visible{display:flex;}
+.modal-box{background:var(--paper);border-radius:8px;padding:1.5rem;width:100%;max-width:400px;box-shadow:0 8px 32px rgba(0,0,0,0.2);}
+.modal-box h2{font-family:'Playfair Display',serif;font-size:1.15rem;margin-bottom:1rem;border-bottom:1.5px solid var(--ink);padding-bottom:0.7rem;}
+.modal-field{margin-bottom:0.9rem;}
+.modal-field label{display:block;font-size:0.7rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:0.3rem;}
+.modal-field input,.modal-field select{width:100%;font-family:'DM Sans',sans-serif;font-size:0.88rem;background:none;border:none;border-bottom:1.5px solid var(--line);outline:none;padding:0.3rem 0;color:var(--ink);transition:border-color 0.15s;}
+.modal-field input:focus,.modal-field select:focus{border-color:var(--accent);}
+.modal-field select{cursor:pointer;}
+.modal-btns{display:flex;justify-content:space-between;align-items:center;margin-top:1.2rem;gap:0.5rem;}
+.modal-btns .right{display:flex;gap:0.5rem;margin-left:auto;}
+.btn{font-family:'DM Sans',sans-serif;font-size:0.78rem;padding:0.38rem 0.9rem;border-radius:4px;cursor:pointer;border:1.5px solid var(--line);background:none;color:var(--muted);transition:all 0.15s;}
+.btn.primary{border-color:var(--accent);color:var(--accent);}
+.btn.primary:hover{background:var(--accent);color:#fff;}
+.btn.danger{border-color:var(--accent);color:var(--accent);}
+.btn.danger:hover{background:var(--accent);color:#fff;}
+.btn.green{border-color:var(--green);color:var(--green);}
+.btn.green:hover{background:var(--green);color:#fff;}
+
+/* Edits modal */
+.edits-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:2000;align-items:flex-start;justify-content:center;padding-top:2.5rem;}
+.edits-overlay.visible{display:flex;}
+.edits-modal{background:var(--paper);border-radius:8px;padding:1.5rem;max-width:520px;width:94%;box-shadow:0 8px 32px rgba(0,0,0,0.2);max-height:82vh;display:flex;flex-direction:column;}
+.edits-modal-header{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:0.8rem;border-bottom:1.5px solid var(--ink);padding-bottom:0.8rem;flex-shrink:0;}
+.edits-modal-header h2{font-family:'Playfair Display',serif;font-size:1.15rem;}
+.edits-modal-close{background:none;border:none;cursor:pointer;font-size:1.1rem;color:var(--muted);}
+.edits-modal-close:hover{color:var(--accent);}
+.edits-body{overflow-y:auto;flex:1;}
+.edits-section{margin-bottom:1.1rem;}
+.edits-section-title{font-size:0.68rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent);font-weight:600;margin-bottom:0.5rem;font-family:'Playfair Display',serif;}
+.edits-item{font-size:0.83rem;font-weight:300;padding:0.28rem 0;border-bottom:1px dotted var(--line);display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;}
+.edits-item:last-child{border-bottom:none;}
+.edits-tag{font-size:0.63rem;font-weight:600;border-radius:3px;padding:0.1rem 0.35rem;flex-shrink:0;text-transform:uppercase;letter-spacing:0.04em;}
+.tag-added{background:rgba(61,107,79,0.12);color:var(--green);}
+.tag-removed{background:rgba(193,68,14,0.1);color:var(--accent);}
+.tag-checked{background:rgba(61,107,79,0.08);color:var(--green);}
+.tag-dayof{background:rgba(194,120,3,0.12);color:var(--amber);}
+.edits-cat{font-size:0.68rem;color:var(--muted);background:rgba(0,0,0,0.05);border-radius:3px;padding:0.1rem 0.35rem;flex-shrink:0;}
+.edits-empty{font-size:0.85rem;color:var(--muted);font-style:italic;}
+.edits-json-wrap{margin-top:1rem;flex-shrink:0;border-top:1px solid var(--line);padding-top:0.8rem;}
+.edits-json-label{font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:0.4rem;display:flex;justify-content:space-between;align-items:center;}
+.copy-btn{font-family:'DM Sans',sans-serif;font-size:0.68rem;background:var(--ink);color:var(--paper);border:none;border-radius:3px;padding:0.2rem 0.6rem;cursor:pointer;transition:background 0.15s;}
+.copy-btn:hover{background:var(--accent);}
+.copy-btn.copied{background:var(--green);}
+.edits-json{font-family:monospace;font-size:0.72rem;background:rgba(0,0,0,0.04);border-radius:4px;padding:0.7rem;max-height:120px;overflow-y:auto;color:var(--ink);white-space:pre-wrap;word-break:break-all;border:1px solid var(--line);cursor:text;user-select:all;}
+
+/* Confirm delete modal */
+.confirm-msg{font-size:0.88rem;color:var(--muted);margin-bottom:1.2rem;line-height:1.5;}
+
+/* Todo suggestion modal */
+.suggest-modal-box{background:var(--paper);border-radius:8px;padding:1.5rem;width:100%;max-width:440px;box-shadow:0 8px 32px rgba(0,0,0,0.2);max-height:85vh;display:flex;flex-direction:column;}
+.suggest-modal-box h2{font-family:'Playfair Display',serif;font-size:1.1rem;margin-bottom:0.3rem;border-bottom:1.5px solid var(--ink);padding-bottom:0.7rem;}
+.suggest-subtitle{font-size:0.72rem;color:var(--muted);margin-bottom:1rem;margin-top:0.4rem;}
+.suggest-loading{text-align:center;padding:1.5rem;font-size:0.85rem;color:var(--muted);font-style:italic;}
+.suggest-list{overflow-y:auto;flex:1;margin-bottom:1rem;}
+.suggest-item{display:flex;align-items:center;gap:0.6rem;padding:0.45rem 0.3rem;border-bottom:1px dotted var(--line);cursor:pointer;border-radius:3px;transition:background 0.12s;}
+.suggest-item:last-child{border-bottom:none;}
+.suggest-item:hover{background:rgba(0,0,0,0.03);}
+.suggest-item input[type=checkbox]{accent-color:var(--green);width:15px;height:15px;flex-shrink:0;cursor:pointer;}
+.suggest-item-text{font-size:0.86rem;font-weight:300;flex:1;}
+.suggest-divider{font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin:0.8rem 0 0.4rem;font-weight:500;}
+.suggest-custom-row{display:flex;gap:0.5rem;align-items:center;margin-bottom:0.5rem;}
+.suggest-custom-row input{flex:1;font-family:'DM Sans',sans-serif;font-size:0.85rem;background:none;border:none;border-bottom:1px solid var(--accent);outline:none;color:var(--ink);padding:0.2rem 0;}
+.suggest-cat-row{margin-bottom:0.8rem;}
+.suggest-cat-row label{display:block;font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:0.25rem;}
+.suggest-cat-row select{width:100%;font-family:'DM Sans',sans-serif;font-size:0.85rem;background:none;border:none;border-bottom:1.5px solid var(--line);outline:none;padding:0.25rem 0;color:var(--ink);cursor:pointer;}
+.suggest-cat-row select:focus{border-color:var(--accent);}
+.suggest-newcat-input{width:100%;font-family:'DM Sans',sans-serif;font-size:0.85rem;background:none;border:none;border-bottom:1px solid var(--accent);outline:none;color:var(--ink);padding:0.2rem 0;margin-top:0.5rem;display:none;}
+
+/* Auth overlay */
+.auth-overlay{position:fixed;inset:0;background:var(--paper);z-index:9000;display:flex;align-items:center;justify-content:center;padding:1.5rem;}
+.auth-box{width:100%;max-width:340px;}
+.auth-box h1{font-family:'Playfair Display',serif;font-size:1.8rem;margin-bottom:0.3rem;}
+.auth-box p{font-size:0.82rem;color:var(--muted);margin-bottom:1.8rem;line-height:1.5;}
+.auth-error{font-size:0.78rem;color:var(--accent);margin-top:0.5rem;min-height:1.2em;}
+.auth-toggle{font-size:0.78rem;color:var(--muted);margin-top:1rem;text-align:center;}
+.auth-toggle button{background:none;border:none;color:var(--accent);cursor:pointer;font-size:0.78rem;text-decoration:underline;padding:0;}
+.auth-loading{text-align:center;padding:2rem;font-size:0.85rem;color:var(--muted);}
+.signout-btn{font-family:'DM Sans',sans-serif;font-size:0.7rem;color:var(--muted);background:none;border:1.5px solid var(--line);padding:0.22rem 0.65rem;border-radius:3px;cursor:pointer;letter-spacing:0.07em;text-transform:uppercase;white-space:nowrap;transition:border-color 0.15s,color 0.15s;}
+.signout-btn:hover{border-color:var(--accent);color:var(--accent);}
+</style>
+</head>
+<body>
+
+<!-- Auth overlay — shown while checking session or when logged out -->
+<div id="auth-overlay" class="auth-overlay">
+  <div id="auth-loading" class="auth-loading">Loading…</div>
+  <div id="auth-form" class="auth-box" style="display:none">
+    <h1>✈️ Trip Planner</h1>
+    <p>Sign in to sync your packing lists across devices.</p>
+    <div class="modal-field">
+      <label>Email</label>
+      <input id="auth-email" type="email" placeholder="you@example.com" autocomplete="email"
+             onkeydown="if(event.key==='Enter')authSignIn()">
+    </div>
+    <div class="modal-field">
+      <label>Password</label>
+      <input id="auth-password" type="password" placeholder="••••••••" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter')authSignIn()">
+    </div>
+    <div id="auth-error" class="auth-error"></div>
+    <div class="modal-btns" style="margin-top:1rem">
+      <div class="right" style="width:100%;justify-content:space-between">
+        <button class="btn" id="auth-signup-btn" onclick="authSignUp()">Create account</button>
+        <button class="btn primary" id="auth-signin-btn" onclick="authSignIn()">Sign in →</button>
+      </div>
+    </div>
+    <div class="auth-toggle">
+      <span id="auth-mode-text">New here?</span>
+      <button onclick="toggleAuthMode()" id="auth-mode-toggle">Create an account</button>
+    </div>
+  </div>
+</div>
+
+<div class="page">
+  <div class="trip-bar">
+    <h1>✈️</h1>
+    <select class="trip-select" id="trip-select" onchange="switchTrip(this.value)"></select>
+    <button class="top-btn green" onclick="openEditsModal()">Edits</button>
+    <button class="top-btn ml-auto" onclick="openNewTripModal()">+ New Trip</button>
+    <button class="signout-btn" id="signout-btn" onclick="authSignOut()" title="Sign out" style="display:none">Sign out</button>
+  </div>
+  <div class="tab-bar">
+    <button class="tab-btn active" id="tab-btn-pack" onclick="switchTab('pack',this)">📦 Packing List</button>
+    <button class="tab-btn" id="tab-btn-todo" onclick="switchTab('todo',this)">✅ To-Do</button>
+  </div>
+
+  <div class="tab-panel active" id="tab-pack">
+    <div class="progress-wrap">
+      <div class="progress-label"><span>Packed</span><span class="frac"><span id="pack-done">0</span> / <span id="pack-total">0</span></span></div>
+      <div class="progress-bar-bg"><div class="progress-bar-fill" id="pack-bar"></div></div>
+    </div>
+    <div class="grid" id="pack-grid"></div>
+    <div class="all-done" id="pack-all-done">✦ All packed — safe travels! ✦</div>
+    <div class="pool-section" id="pack-pool" style="display:none">
+      <div class="pool-header"><h3>📚 Item Pool — tap to add</h3></div>
+      <div class="pool-grid" id="pack-pool-grid"></div>
+    </div>
+    <div class="panel-footer">
+      <span class="count" id="pack-footer"></span>
+      <button class="reset-btn" onclick="resetTab('pack')">Reset</button>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tab-todo">
+    <div class="progress-wrap">
+      <div class="progress-label"><span>Done</span><span class="frac"><span id="todo-done">0</span> / <span id="todo-total">0</span></span></div>
+      <div class="progress-bar-bg"><div class="progress-bar-fill" id="todo-bar"></div></div>
+    </div>
+    <div id="todo-grid" style="max-width:480px"></div>
+    <div class="all-done" id="todo-all-done">✦ Ready to go! ✦</div>
+    <div class="pool-section" id="todo-pool" style="display:none">
+      <div class="pool-header"><h3>📚 Item Pool — long press to add</h3></div>
+      <div class="pool-grid" id="todo-pool-grid"></div>
+    </div>
+    <div class="panel-footer">
+      <span class="count" id="todo-footer"></span>
+      <button class="reset-btn" onclick="resetTab('todo')">Reset</button>
+    </div>
+  </div>
+</div>
+
+<!-- New trip modal -->
+<div class="overlay" id="new-trip-modal">
+  <div class="modal-box">
+    <h2>New Trip</h2>
+    <div class="modal-field">
+      <label>Trip Name</label>
+      <input id="new-trip-name" type="text" placeholder="e.g. Portland Weekend" onkeydown="if(event.key==='Enter')createTrip()">
+    </div>
+    <div class="modal-btns"><div class="right">
+      <button class="btn" onclick="closeAllModals()">Cancel</button>
+      <button class="btn primary" onclick="createTrip()">Create</button>
+    </div></div>
+  </div>
+</div>
+
+<!-- Edit item modal -->
+<div class="overlay" id="edit-item-modal">
+  <div class="modal-box">
+    <h2>Edit Item</h2>
+    <div class="modal-field">
+      <label>Item Name</label>
+      <input id="edit-item-name" type="text">
+    </div>
+    <div class="modal-field">
+      <label>Category</label>
+      <select id="edit-item-cat"></select>
+    </div>
+    <div class="modal-field" id="new-cat-field" style="display:none">
+      <label>New Category Name</label>
+      <input id="edit-new-cat" type="text" placeholder="e.g. Electronics">
+    </div>
+    <div class="modal-btns">
+      <button class="btn danger" onclick="openConfirmDelete()">🗑 Delete Permanently</button>
+      <div class="right">
+        <button class="btn" onclick="closeAllModals()">Cancel</button>
+        <button class="btn primary" onclick="saveItemEdit()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm delete modal -->
+<div class="overlay" id="confirm-delete-modal">
+  <div class="modal-box">
+    <h2>Permanently Delete?</h2>
+    <p class="confirm-msg" id="confirm-msg"></p>
+    <div class="modal-btns"><div class="right">
+      <button class="btn" onclick="closeAllModals();openEditModal(editState.item,editState.tab,editState.catId)">Cancel</button>
+      <button class="btn danger" onclick="permanentlyDeleteItem()">Delete from all trips</button>
+    </div></div>
+  </div>
+</div>
+
+<!-- Todo suggestion modal -->
+<div class="overlay" id="suggest-modal">
+  <div class="suggest-modal-box">
+    <h2 id="suggest-title">Add To-Do Tasks</h2>
+    <p class="suggest-subtitle" id="suggest-subtitle"></p>
+    <div class="suggest-list" id="suggest-list">
+      <div class="suggest-loading">✨ Generating suggestions…</div>
+    </div>
+    <div class="suggest-divider">Custom task</div>
+    <div class="suggest-custom-row">
+      <input id="suggest-custom-input" type="text" placeholder="Type a task…">
+    </div>
+    <div class="suggest-cat-row">
+      <label>Category</label>
+      <select id="suggest-cat-select" onchange="onSuggestCatChange()"></select>
+      <input id="suggest-newcat-input" class="suggest-newcat-input" type="text" placeholder="New category name…">
+    </div>
+    <div class="modal-btns"><div class="right">
+      <button class="btn" onclick="closeAllModals()">Cancel</button>
+      <button class="btn primary" onclick="submitSuggestions()">Add Selected</button>
+    </div></div>
+  </div>
+</div>
+
+<!-- Edit todo item modal -->
+<div class="overlay" id="edit-todo-modal">
+  <div class="modal-box">
+    <h2>Edit Task</h2>
+    <div class="modal-field">
+      <label>Task Name</label>
+      <input id="edit-todo-name" type="text">
+    </div>
+    <div class="modal-field">
+      <label>Category</label>
+      <select id="edit-todo-cat" onchange="onEditTodoCatChange()"></select>
+    </div>
+    <div class="modal-field" id="edit-todo-newcat-field" style="display:none">
+      <label>New Category Name</label>
+      <input id="edit-todo-newcat" type="text" placeholder="e.g. Day-of Prep">
+    </div>
+    <div class="modal-btns">
+      <button class="btn danger" onclick="openConfirmDeleteTodo()">🗑 Delete Permanently</button>
+      <div class="right">
+        <button class="btn" onclick="closeAllModals()">Cancel</button>
+        <button class="btn primary" onclick="saveTodoEdit()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm delete todo modal -->
+<div class="overlay" id="confirm-delete-todo-modal">
+  <div class="modal-box">
+    <h2>Permanently Delete?</h2>
+    <p class="confirm-msg" id="confirm-todo-msg"></p>
+    <div class="modal-btns"><div class="right">
+      <button class="btn" onclick="closeAllModals();openEditTodoModal(editTodoState.item)">Cancel</button>
+      <button class="btn danger" onclick="permanentlyDeleteTodoItem()">Delete from all trips</button>
+    </div></div>
+  </div>
+</div>
+
+<!-- Edits modal -->
+<div class="edits-overlay" id="edits-modal">
+  <div class="edits-modal">
+    <div class="edits-modal-header">
+      <h2>Edits vs Default</h2>
+      <button class="edits-modal-close" onclick="closeEditsModal()">✕</button>
+    </div>
+    <div class="edits-body" id="edits-body"></div>
+    <div class="edits-json-wrap">
+      <div class="edits-json-label">
+        <span>JSON — paste to Claude to hardcode</span>
+        <button class="copy-btn" id="copy-btn" onclick="copyEditsJson()">Copy</button>
+      </div>
+      <div class="edits-json" id="edits-json"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════
+// MASTER LIBRARY
+// ═══════════════════════════════════
+// Each item: { id, name, catId, tab }
+// Categories: { id, icon, title, tab }
+
+const MASTER_CATS = {
+  // Pack cats
+  work:      { id:'work',     icon:'💼', title:'Work',            tab:'pack' },
+  tech:      { id:'tech',     icon:'🔌', title:'Tech & Power',    tab:'pack' },
+  hygiene:   { id:'hygiene',  icon:'🧴', title:'Hygiene & Health',tab:'pack' },
+  food:      { id:'food',     icon:'☕', title:'Food & Drink',    tab:'pack' },
+  clothing:  { id:'clothing', icon:'👟', title:'Clothing',        tab:'pack' },
+  tilly:     { id:'tilly',    icon:'🐕', title:'Tilly',           tab:'pack' },
+  household: { id:'household',icon:'🏠', title:'Household',       tab:'pack' },
+  gym:       { id:'gym',      icon:'🏋️', title:'Gym & Shower',    tab:'pack' },
+  drone:     { id:'drone',    icon:'🚁', title:'Tiny Whoop',      tab:'pack' },
+  bag:       { id:'bag',      icon:'🎒', title:'Overnight Bag',   tab:'pack' },
+  // Todo cats
+  shopping:  { id:'shopping', icon:'🛒', title:'Shopping',        tab:'todo' },
+  home:      { id:'home',     icon:'🏠', title:'Home',            tab:'todo' },
+  van:       { id:'van',      icon:'🚐', title:'Van',             tab:'todo' },
+  personal:  { id:'personal', icon:'🧼', title:'Personal',        tab:'todo' },
+  tillytodo: { id:'tillytodo',icon:'🐕', title:'Tilly',           tab:'todo' },
+};
+
+// Master item list — single source of truth
+// subcatLabel is optional for subcategory display within clothing etc.
+let MASTER_ITEMS = [
+  // Work
+  {id:'i_compAcc',    name:'Computer accessories',          catId:'work',      tab:'pack'},
+  {id:'i_badge',      name:'Work badge',                    catId:'work',      tab:'pack'},
+  {id:'i_laptop',     name:'Work computer & charger',       catId:'work',      tab:'pack'},
+  // Tech
+  {id:'i_carSec',     name:'Car security devices',          catId:'tech',      tab:'pack'},
+  {id:'i_fieldy',     name:'Fieldy',                        catId:'tech',      tab:'pack'},
+  {id:'i_headphones', name:'Headphones',                    catId:'tech',      tab:'pack'},
+  {id:'i_hidcam',     name:'Hidden camera detector',        catId:'tech',      tab:'pack'},
+  {id:'i_jumpstart',  name:'Jump starter',                  catId:'tech',      tab:'pack'},
+  {id:'i_tablet',     name:'Tablet',                        catId:'tech',      tab:'pack'},
+  {id:'i_travelchg',  name:'Travel chargers',               catId:'tech',      tab:'pack'},
+  {id:'i_esk8',       name:'Electric skateboard & charger', catId:'tech',      tab:'pack'},
+  {id:'i_extmon',     name:'External monitor + cables',     catId:'tech',      tab:'pack'},
+  {id:'i_powerstrip', name:'Power strip',                   catId:'tech',      tab:'pack'},
+  {id:'i_solar',      name:'Solar generator & charger',     catId:'tech',      tab:'pack'},
+  // Hygiene
+  {id:'i_etoothbrush',name:'Electric toothbrush',           catId:'hygiene',   tab:'pack'},
+  {id:'i_hygi',       name:'Hygiene items',                 catId:'hygiene',   tab:'pack'},
+  {id:'i_mouthguard', name:'Mouth guard',                   catId:'hygiene',   tab:'pack'},
+  {id:'i_sleepmask',  name:'Sleep mask',                    catId:'hygiene',   tab:'pack'},
+  {id:'i_waterpik',   name:'Waterpik',                      catId:'hygiene',   tab:'pack'},
+  {id:'i_handsoap',   name:'Hand soap',                     catId:'hygiene',   tab:'pack'},
+  // Food
+  {id:'i_ag',         name:'Athletic Greens',               catId:'food',      tab:'pack'},
+  {id:'i_agbottle',   name:'Athletic Greens bottle',        catId:'food',      tab:'pack'},
+  {id:'i_coffeemug',  name:'Coffee mug',                    catId:'food',      tab:'pack'},
+  {id:'i_tillybrocoli',name:"Tilly's broccoli & cheese",   catId:'food',      tab:'pack'},
+  {id:'i_waterbottle',name:'Water bottle',                  catId:'food',      tab:'pack'},
+  {id:'i_waterbottlel',name:'Water bottle (large)',         catId:'food',      tab:'pack'},
+  {id:'i_freshfruit', name:'Fresh fruit',                   catId:'food',      tab:'pack'},
+  {id:'i_instcoffee', name:'Instant coffee',                catId:'food',      tab:'pack'},
+  {id:'i_oatcreamers',name:'Oat creamers',                  catId:'food',      tab:'pack'},
+  {id:'i_oregano',    name:'Oregano',                       catId:'food',      tab:'pack'},
+  {id:'i_spoonula',   name:'Spoonula',                      catId:'food',      tab:'pack'},
+  {id:'i_spork',      name:'Spork',                         catId:'food',      tab:'pack'},
+  {id:'i_waterheater',name:'Water heater',                  catId:'food',      tab:'pack'},
+  // Clothing
+  {id:'i_runninggear',name:'Running gear',                  catId:'clothing',  tab:'pack', subcatLabel:'Tops'},
+  {id:'i_tshirts',    name:'T-shirts',                      catId:'clothing',  tab:'pack', subcatLabel:'Tops'},
+  {id:'i_workclothes',name:'Work clothes',                  catId:'clothing',  tab:'pack', subcatLabel:'Tops'},
+  {id:'i_pajamap',    name:'Pajama pants',                  catId:'clothing',  tab:'pack', subcatLabel:'Bottoms'},
+  {id:'i_carhartt',   name:'Carhartt jacket',               catId:'clothing',  tab:'pack', subcatLabel:'Outerwear'},
+  {id:'i_downjacket', name:'Down jacket',                   catId:'clothing',  tab:'pack', subcatLabel:'Outerwear'},
+  {id:'i_downbooties',name:'Down booties',                  catId:'clothing',  tab:'pack', subcatLabel:'Footwear'},
+  {id:'i_heelies',    name:'Heelies',                       catId:'clothing',  tab:'pack', subcatLabel:'Footwear'},
+  {id:'i_runshoes',   name:'Running shoes',                 catId:'clothing',  tab:'pack', subcatLabel:'Footwear'},
+  {id:'i_workshoes',  name:'Work shoes',                    catId:'clothing',  tab:'pack', subcatLabel:'Footwear'},
+  {id:'i_showershoes',name:'Shower shoes',                  catId:'clothing',  tab:'pack', subcatLabel:'Footwear'},
+  {id:'i_gloves',     name:'Gloves',                        catId:'clothing',  tab:'pack', subcatLabel:'Essentials'},
+  {id:'i_keys',       name:'Keys',                          catId:'clothing',  tab:'pack', subcatLabel:'Essentials'},
+  {id:'i_phone',      name:'Phone',                         catId:'clothing',  tab:'pack', subcatLabel:'Essentials'},
+  {id:'i_socks',      name:'Socks',                         catId:'clothing',  tab:'pack', subcatLabel:'Essentials'},
+  {id:'i_sunglasses', name:'Sunglasses',                    catId:'clothing',  tab:'pack', subcatLabel:'Essentials'},
+  {id:'i_underwear',  name:'Underwear',                     catId:'clothing',  tab:'pack', subcatLabel:'Essentials'},
+  {id:'i_wallet',     name:'Wallet',                        catId:'clothing',  tab:'pack', subcatLabel:'Essentials'},
+  {id:'i_warmhat',    name:'Warm hat',                      catId:'clothing',  tab:'pack', subcatLabel:'Essentials'},
+  {id:'i_workbelt',   name:'Work belt',                     catId:'clothing',  tab:'pack', subcatLabel:'Essentials'},
+  {id:'i_socksundies',name:'Socks & underwear',             catId:'clothing',  tab:'pack', subcatLabel:'Essentials'},
+  {id:'i_clochange',  name:'Change of clothes (x2)',        catId:'clothing',  tab:'pack', subcatLabel:'Clothes'},
+  // Tilly
+  {id:'i_bowls',      name:'Bowls',                         catId:'tilly',     tab:'pack'},
+  {id:'i_bullysticks',name:'Bully sticks',                  catId:'tilly',     tab:'pack'},
+  {id:'i_dogbed',     name:'Dog bed',                       catId:'tilly',     tab:'pack'},
+  {id:'i_dogfood',    name:'Dog food',                      catId:'tilly',     tab:'pack'},
+  {id:'i_leash',      name:'Leash',                         catId:'tilly',     tab:'pack'},
+  {id:'i_toys',       name:'Toys',                          catId:'tilly',     tab:'pack'},
+  {id:'i_cheddar',    name:'Cheddar cheese',                catId:'tilly',     tab:'pack'},
+  // Household
+  {id:'i_foodbins',   name:'Food storage bins',             catId:'household', tab:'pack'},
+  {id:'i_lziplocks',  name:'Large ziplock bags',            catId:'household', tab:'pack'},
+  {id:'i_sziplocks',  name:'Small ziplock bags',            catId:'household', tab:'pack'},
+  {id:'i_trashbags',  name:'Trash bags',                    catId:'household', tab:'pack'},
+  {id:'i_wetwipes',   name:'Wet wipes',                     catId:'household', tab:'pack'},
+  {id:'i_collaptoilet',name:'Collapsing toilet',            catId:'household', tab:'pack'},
+  {id:'i_lblanket',   name:'Large electric blanket',        catId:'household', tab:'pack'},
+  {id:'i_papertowels',name:'Paper towels',                  catId:'household', tab:'pack'},
+  {id:'i_peebottle',  name:'Pee bottle',                    catId:'household', tab:'pack'},
+  {id:'i_pepgel',     name:'Pepper gel',                    catId:'household', tab:'pack'},
+  {id:'i_pillows',    name:'Pillows',                       catId:'household', tab:'pack'},
+  {id:'i_sblanket',   name:'Small electric blanket',        catId:'household', tab:'pack'},
+  {id:'i_slock',      name:'Small locker lock',             catId:'household', tab:'pack'},
+  {id:'i_toiletsup',  name:'Toilet supplies',               catId:'household', tab:'pack'},
+  {id:'i_toiletbin',  name:'Toilet waste bin',              catId:'household', tab:'pack'},
+  {id:'i_tools',      name:'Tools',                         catId:'household', tab:'pack'},
+  {id:'i_trashcan',   name:'Trash can',                     catId:'household', tab:'pack'},
+  {id:'i_strashbags', name:'Small trash bags',              catId:'household', tab:'pack'},
+  {id:'i_rwaterbottle',name:'Reusable water bottle',        catId:'bag',       tab:'pack'},
+  // Gym
+  {id:'i_yogamat',    name:'Yoga mat',                      catId:'gym',       tab:'pack', subcatLabel:'Yoga'},
+  {id:'i_yogablocks', name:'Yoga blocks',                   catId:'gym',       tab:'pack', subcatLabel:'Yoga'},
+  {id:'i_towel',      name:'Towel',                         catId:'gym',       tab:'pack', subcatLabel:'Shower'},
+  // Drone
+  {id:'i_dronebatt',  name:'Batteries & charger',           catId:'drone',     tab:'pack'},
+  {id:'i_droneunit',  name:'Drone & spare parts',           catId:'drone',     tab:'pack'},
+  {id:'i_goggles',    name:'Goggles',                       catId:'drone',     tab:'pack'},
+  {id:'i_controller', name:'Radio controller',              catId:'drone',     tab:'pack'},
+  // Bag
+  {id:'i_pepgelb',    name:'Pepper gel',                    catId:'bag',       tab:'pack'},
+  // Todo
+  {id:'t_drainsnake', name:'Buy drain snake (Walmart)',     catId:'shopping',  tab:'todo'},
+  {id:'t_instcoffee', name:'Buy instant coffee (Walmart)',  catId:'shopping',  tab:'todo'},
+  {id:'t_lziplock',   name:'Buy large ziplock bags (Walmart)',catId:'shopping',tab:'todo'},
+  {id:'t_padlock',    name:'Buy padlock (Walmart)',         catId:'shopping',  tab:'todo'},
+  {id:'t_powerstrip', name:'Buy power strip (Walmart)',     catId:'shopping',  tab:'todo'},
+  {id:'t_sheets',     name:'Change sheets',                 catId:'home',      tab:'todo'},
+  {id:'t_laundry',    name:'Do laundry',                    catId:'home',      tab:'todo'},
+  {id:'t_vacuum',     name:'Vacuum / sweep',                catId:'home',      tab:'todo'},
+  {id:'t_packvan',    name:'Pack van',                      catId:'van',       tab:'todo'},
+  {id:'t_cleansync',  name:'Clean & sync',                  catId:'personal',  tab:'todo'},
+  {id:'t_shave',      name:'Shave & haircut',               catId:'personal',  tab:'todo'},
+  {id:'t_shower',     name:'Shower',                        catId:'personal',  tab:'todo'},
+  {id:'t_tillybath',  name:'Give Tilly a bath',             catId:'tillytodo', tab:'todo'},
+];
+
+// Trip definitions — arrays of item IDs active for that trip
+const TRIP_DEFAULTS = {
+  salem: {
+    name: 'Salem Trip',
+    pack: ['i_compAcc','i_badge','i_laptop','i_carSec','i_fieldy','i_headphones','i_hidcam','i_jumpstart','i_tablet','i_travelchg','i_etoothbrush','i_hygi','i_mouthguard','i_sleepmask','i_waterpik','i_ag','i_agbottle','i_coffeemug','i_tillybrocoli','i_waterbottle','i_runninggear','i_tshirts','i_workclothes','i_pajamap','i_carhartt','i_heelies','i_runshoes','i_workshoes','i_gloves','i_keys','i_phone','i_socks','i_sunglasses','i_underwear','i_wallet','i_warmhat','i_workbelt','i_bowls','i_bullysticks','i_dogbed','i_dogfood','i_leash','i_toys','i_foodbins','i_lziplocks','i_sziplocks','i_trashbags','i_wetwipes','i_towel'],
+    defaultDayof: ['i_fieldy','i_etoothbrush','i_mouthguard','i_sleepmask','i_coffeemug','i_tillybrocoli','i_gloves','i_runshoes','i_keys','i_phone','i_sunglasses','i_tablet'],
+    todo: ['t_drainsnake','t_padlock','t_vacuum','t_cleansync','t_shave'],
+  },
+  birthday: {
+    name: 'Birthday Trip',
+    pack: ['i_esk8','i_headphones','i_phone','i_travelchg','i_dronebatt','i_droneunit','i_goggles','i_controller','i_etoothbrush','i_handsoap','i_hygi','i_mouthguard','i_sleepmask','i_towel','i_clochange','i_pajamap','i_heelies','i_showershoes','i_carhartt','i_keys','i_socksundies','i_sunglasses','i_wallet','i_bowls','i_bullysticks','i_cheddar','i_dogbed','i_dogfood','i_leash','i_toys','i_lziplocks','i_pepgel','i_rwaterbottle','i_sblanket','i_strashbags','i_sziplocks','i_wetwipes'],
+    todo: ['t_drainsnake','t_instcoffee','t_lziplock','t_padlock','t_powerstrip','t_sheets','t_laundry','t_vacuum','t_packvan','t_cleansync','t_shave','t_shower','t_tillybath'],
+  }
+};
+
+// ═══════════════════════════════════
+// STATE
+// ═══════════════════════════════════
+let currentTrip = null;
+let currentTab = 'pack';
+let ctxMenu = null;
+let pressTimer = null;
+let editState = {};
+
+// Supabase auth & sync state
+let supabase = null;
+let currentUserId = null;
+const _pendingTripSync = {};
+let _metaSyncTimer = null;
+
+// Core menu utils — defined early so all functions can use them
+function positionMenu(menu, e) {
+  const tx = e.touches&&e.touches[0];
+  const x = Math.min((tx?tx.clientX:e.clientX)||0, window.innerWidth-185);
+  const y = Math.min((tx?tx.clientY:e.clientY)||0, window.innerHeight-200);
+  menu.style.left=x+'px'; menu.style.top=y+'px';
+}
+function closeCtxMenu() { if(ctxMenu){ctxMenu.remove();ctxMenu=null;} }
+document.addEventListener('click', e=>{ if(ctxMenu&&!ctxMenu.contains(e.target))closeCtxMenu(); });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeCtxMenu();closeAllModals();} });
+
+function sk(trip, key) { return `trip:${trip}:${key}`; }
+function gs(trip, key, def) { try { const v=localStorage.getItem(sk(trip,key)); return v?JSON.parse(v):def; } catch(e){return def;} }
+
+// Change log — intercept every ss() write
+const SKIP_LOG_KEYS = new Set(['__meta__:lastTrip','__meta__:trips']);
+function logChange(trip, key, val) {
+  if (SKIP_LOG_KEYS.has(`${trip}:${key}`)) return;
+  try {
+    const log = JSON.parse(localStorage.getItem('changeLog') || '[]');
+    log.push({ trip, key, val, ts: Date.now() });
+    if (log.length > 500) log.splice(0, log.length - 500);
+    localStorage.setItem('changeLog', JSON.stringify(log));
+    queueMetaSync();
+  } catch(e) {}
+}
+
+function logEdit(edit) {
+  // edit: { id, oldName, newName, oldCatId, newCatId, tab }
+  try {
+    const edits = JSON.parse(localStorage.getItem('editLog') || '[]');
+    edits.push({ ...edit, ts: Date.now() });
+    localStorage.setItem('editLog', JSON.stringify(edits));
+    queueMetaSync();
+  } catch(e) {}
+}
+function ss(trip, key, val) {
+  try {
+    localStorage.setItem(sk(trip,key), JSON.stringify(val));
+    logChange(trip, key, val);
+    if (supabase && currentUserId) {
+      if (trip === '__meta__') {
+        if (key === 'trips') syncTripsToSupabase();
+        else queueMetaSync();
+      } else {
+        queueTripSync(trip);
+      }
+    }
+  } catch(e) {}
+}
+
+function getMasterItems() {
+  try { const v=localStorage.getItem('masterItems'); return v?JSON.parse(v):null; } catch(e){return null;}
+}
+function saveMasterItems() {
+  try {
+    localStorage.setItem('masterItems', JSON.stringify(MASTER_ITEMS));
+    logChange('__library__', 'masterItems', MASTER_ITEMS);
+    syncMasterItemsToSupabase();
+  } catch(e){}
+}
+function getMasterCats() {
+  try { const v=localStorage.getItem('masterCats'); return v?JSON.parse(v):null; } catch(e){return null;}
+}
+function saveMasterCats() {
+  try {
+    localStorage.setItem('masterCats', JSON.stringify(Object.values(MASTER_CATS)));
+    logChange('__library__', 'masterCats', Object.values(MASTER_CATS));
+    syncMasterCatsToSupabase();
+  } catch(e){}
+}
+
+function getActiveIds(trip, tab) {
+  const def = TRIP_DEFAULTS[trip]?.[tab] || [];
+  const stored = gs(trip, tab+'Active', null);
+  return stored !== null ? stored : [...def];
+}
+function setActiveIds(trip, tab, ids) { ss(trip, tab+'Active', ids); }
+
+function getTripList() { return gs('__meta__','trips',['salem','birthday']); }
+function saveTripList(l) { ss('__meta__','trips',l); }
+function getTripName(id) { const s=gs(id,'name',null); return s||TRIP_DEFAULTS[id]?.name||id; }
+
+// ═══════════════════════════════════
+// ITEM LIBRARY HELPERS
+// ═══════════════════════════════════
+function getItem(id) { return MASTER_ITEMS.find(i=>i.id===id); }
+function getCat(id) { return MASTER_CATS[id] || Object.values(MASTER_CATS).find(c=>c.id===id); }
+function itemsForTab(tab) { return MASTER_ITEMS.filter(i=>i.tab===tab); }
+function allCatIds(tab) { return [...new Set(itemsForTab(tab).map(i=>i.catId))]; }
+
+// ═══════════════════════════════════
+// TRIP UI
+// ═══════════════════════════════════
+function buildTripSelect() {
+  const sel = document.getElementById('trip-select');
+  const trips = getTripList();
+  sel.innerHTML = trips.map(id=>`<option value="${id}"${id===currentTrip?' selected':''}>${getTripName(id)}</option>`).join('');
+}
+function switchTrip(id) { currentTrip=id; ss('__meta__','lastTrip',id); renderAll(); }
+function switchTab(name, btn) {
+  currentTab=name;
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ═══════════════════════════════════
+// RENDER
+// ═══════════════════════════════════
+function renderAll() { renderTab('pack'); renderTab('todo'); }
+
+function renderTab(tab) {
+  const activeIds = new Set(getActiveIds(currentTrip, tab));
+  const checked = gs(currentTrip, tab+'Checked', {});
+  const customDayof = new Set(gs(currentTrip, tab+'Dayof', []));
+  const builtinDayof = new Set(TRIP_DEFAULTS[currentTrip]?.defaultDayof || []);
+  const dayof = new Set([...builtinDayof, ...customDayof]);
+
+  // Active items grouped by cat
+  const gridEl = document.getElementById(tab===('pack')?'pack-grid':'todo-grid');
+  gridEl.innerHTML = '';
+
+  const catOrder = allCatIds(tab).filter(cid => itemsForTab(tab).some(i=>i.catId===cid && activeIds.has(i.id)));
+  
+  catOrder.forEach(catId => {
+    const cat = getCat(catId);
+    if (!cat) return;
+    const catItems = itemsForTab(tab).filter(i=>i.catId===catId && activeIds.has(i.id));
+    if (!catItems.length) return;
+
+    const section = document.createElement('div');
+    section.className = tab==='pack' ? 'category' : 'section';
+
+    const header = document.createElement('div');
+    header.className = tab==='pack' ? 'category-header' : 'section-header';
+    header.innerHTML = `<span class="${tab==='pack'?'cat-icon':'sec-icon'}">${cat.icon}</span><span class="${tab==='pack'?'cat-title':'sec-title'}">${cat.title}</span><span class="${tab==='pack'?'cat-count':'sec-count'}" id="cnt-${tab}-${catId}"></span>`;
+    const addBtn = document.createElement('button');
+    addBtn.className = 'add-btn'; addBtn.textContent = '+';
+    addBtn.onclick = () => showAddRow(tab, catId);
+    header.appendChild(addBtn);
+    section.appendChild(header);
+
+    const ul = document.createElement('ul');
+    ul.id = `ul-${tab}-${catId}`;
+
+    // Group by subcatLabel if present
+    const subcats = [...new Set(catItems.map(i=>i.subcatLabel||''))];
+    subcats.forEach(sub => {
+      if (sub) {
+        const lbl = document.createElement('div');
+        lbl.className = 'subcategory-label'; lbl.textContent = sub;
+        ul.appendChild(lbl);
+      }
+      catItems.filter(i=>(i.subcatLabel||'')=== sub).forEach(item => {
+        ul.appendChild(buildActiveLi(item, tab, checked, dayof));
+      });
+    });
+
+    // Add row
+    const addRow = document.createElement('div');
+    addRow.className = 'add-row'; addRow.id = `addrow-${tab}-${catId}`;
+    addRow.innerHTML = `<input class="add-input" id="addinput-${tab}-${catId}" placeholder="New item…"><button class="add-confirm">Add</button><button class="add-cancel">✕</button>`;
+    addRow.querySelector('.add-confirm').onclick = () => confirmAdd(tab, catId);
+    addRow.querySelector('.add-cancel').onclick = () => hideAddRow(tab, catId);
+    addRow.querySelector('.add-input').onkeydown = e => { if(e.key==='Enter')confirmAdd(tab,catId); if(e.key==='Escape')hideAddRow(tab,catId); };
+
+    section.appendChild(ul);
+    section.appendChild(addRow);
+    gridEl.appendChild(section);
+  });
+
+  updateProgress(tab);
+  renderPool(tab);
+}
+
+function buildActiveLi(item, tab, checked, dayof) {
+  const li = document.createElement('li');
+  const isChecked = !!checked[item.id];
+  const isDayof = dayof.has(item.id);
+  if (isChecked) li.classList.add('checked');
+  if (isDayof) li.classList.add('dayof');
+  li.innerHTML = `<span class="cb"></span><span class="item-text">${item.name}</span>`;
+  li.onclick = e => { if (!e.target.classList.contains('del-btn')) toggleItem(item.id, tab); };
+  if (tab === 'pack') attachItemCtx(li, item, tab);
+  else attachTodoCtx(li, item);
+  return li;
+}
+
+// ═══════════════════════════════════
+// POOL (unselected items)
+// ═══════════════════════════════════
+function renderPool(tab) {
+  const activeIds = new Set(getActiveIds(currentTrip, tab));
+  const poolItems = itemsForTab(tab).filter(i => !activeIds.has(i.id));
+
+  const poolSection = document.getElementById(tab+'-pool');
+  const poolGrid = document.getElementById(tab+'-pool-grid');
+  poolGrid.innerHTML = '';
+
+  if (!poolItems.length) { poolSection.style.display='none'; return; }
+  poolSection.style.display='block';
+
+  // Group by cat
+  const catIds = [...new Set(poolItems.map(i=>i.catId))];
+  catIds.forEach(catId => {
+    const cat = getCat(catId);
+    if (!cat) return;
+    const items = poolItems.filter(i=>i.catId===catId);
+
+    const catEl = document.createElement('div');
+    catEl.className = 'pool-cat';
+
+    const hdr = document.createElement('div');
+    hdr.className = 'pool-cat-header';
+    hdr.innerHTML = `<span class="pool-cat-icon">${cat.icon}</span><span class="pool-cat-title">${cat.title}</span>`;
+    catEl.appendChild(hdr);
+
+    const ul = document.createElement('ul');
+    ul.className = 'pool-ul';
+    items.forEach(item => {
+      const li = document.createElement('li');
+      li.className = 'pool-li';
+      // Which trips have this item?
+      const tripList = getTripList();
+      const sources = tripList.filter(t => {
+        const ids = new Set(getActiveIds(t, tab));
+        return ids.has(item.id) && t !== currentTrip;
+      }).map(t => getTripName(t));
+      const sourceTag = sources.length ? `<span class="pool-source">${sources.join(', ')}</span>` : '';
+      li.innerHTML = `<span class="item-text">${item.name}</span>${sourceTag}`;
+      attachPoolCtx(li, item, tab);
+      ul.appendChild(li);
+    });
+    catEl.appendChild(ul);
+    poolGrid.appendChild(catEl);
+  });
+}
+
+function attachPoolCtx(li, item, tab) {
+  let pt = null;
+  const handler = e => {
+    e.preventDefault(); closeCtxMenu();
+    const menu = document.createElement('div');
+    menu.className = 'ctx-menu';
+    menu.innerHTML = `
+      <div class="ctx-item" id="cpm-add">➕ Add to this list</div>
+      <div class="ctx-divider"></div>
+      <div class="ctx-item" id="cpm-edit">✏️ Edit item info</div>
+    `;
+    menu.querySelector('#cpm-add').onclick = () => { addItemToTrip(item.id, tab); closeCtxMenu(); };
+    menu.querySelector('#cpm-edit').onclick = () => { closeCtxMenu(); openEditModal(item, tab, item.catId); };
+    positionMenu(menu, e);
+    document.body.appendChild(menu); ctxMenu = menu;
+  };
+  li.addEventListener('contextmenu', handler);
+  li.addEventListener('touchstart', e=>{ pt=setTimeout(()=>handler(e),500); },{passive:true});
+  li.addEventListener('touchend', ()=>clearTimeout(pt));
+  li.addEventListener('touchmove', ()=>clearTimeout(pt));
+}
+
+// ═══════════════════════════════════
+// ITEM INTERACTIONS
+// ═══════════════════════════════════
+function toggleItem(itemId, tab) {
+  const checked = gs(currentTrip, tab+'Checked', {});
+  if (checked[itemId]) delete checked[itemId]; else checked[itemId] = true;
+  ss(currentTrip, tab+'Checked', checked);
+  updateProgress(tab);
+  // Just update the li state without full re-render
+  const item = getItem(itemId);
+  if (!item) return;
+  const uls = document.querySelectorAll(`#${tab==='pack'?'pack-grid':'todo-grid'} ul`);
+  uls.forEach(ul => {
+    ul.querySelectorAll('li').forEach(li => {
+      const t = li.querySelector('.item-text');
+      if (t && t.textContent === item.name) {
+        if (checked[itemId]) li.classList.add('checked'); else li.classList.remove('checked');
+      }
+    });
+  });
+}
+
+function addItemToTrip(itemId, tab) {
+  const ids = getActiveIds(currentTrip, tab);
+  if (!ids.includes(itemId)) { ids.push(itemId); setActiveIds(currentTrip, tab, ids); }
+  renderTab(tab);
+}
+
+function removeItemFromTrip(itemId, tab) {
+  const ids = getActiveIds(currentTrip, tab).filter(id=>id!==itemId);
+  setActiveIds(currentTrip, tab, ids);
+  const checked = gs(currentTrip, tab+'Checked', {});
+  delete checked[itemId];
+  ss(currentTrip, tab+'Checked', checked);
+  renderTab(tab);
+}
+
+// ═══════════════════════════════════
+// ADD NEW ITEM
+// ═══════════════════════════════════
+
+// ═══════════════════════════════════
+// ATTACH ITEM CTX — updated with Add To-Do
+// ═══════════════════════════════════
+function attachItemCtx(li, item, tab) {
+  const handler = e => {
+    e.preventDefault(); closeCtxMenu();
+    const dayof = new Set([...new Set(TRIP_DEFAULTS[currentTrip]?.defaultDayof||[]), ...gs(currentTrip,tab+'Dayof',[])]);
+    const isDayof = dayof.has(item.id);
+    const checked = gs(currentTrip, tab+'Checked', {});
+    const isChecked = !!checked[item.id];
+    const menu = document.createElement('div');
+    menu.className = 'ctx-menu';
+    menu.innerHTML = `
+      <div class="ctx-item" id="cm-dayof">${isDayof?'✕ Remove day-of flag':'☀️ Pack day-of'}</div>
+      <div class="ctx-divider"></div>
+      <div class="ctx-item" id="cm-toggle">${isChecked?'☐ Uncheck':'☑ Check'}</div>
+      <div class="ctx-divider"></div>
+      ${tab==='pack'?'<div class="ctx-item" id="cm-todo">📋 Add to-do task</div><div class="ctx-divider"></div>':''}
+      <div class="ctx-item" id="cm-edit">✏️ Edit item info</div>
+      <div class="ctx-divider"></div>
+      <div class="ctx-item danger" id="cm-remove">✕ Remove from list</div>
+    `;
+    menu.querySelector('#cm-dayof').onclick = () => {
+      const d = gs(currentTrip, tab+'Dayof', []);
+      const s = new Set(d);
+      const builtinDayofSet = new Set(TRIP_DEFAULTS[currentTrip]?.defaultDayof||[]);
+      if (s.has(item.id)) {
+        s.delete(item.id);
+        // If removing a builtin flag, track it as explicitly removed
+        if (builtinDayofSet.has(item.id)) {
+          const rem = new Set(gs(currentTrip, tab+'DayofRemoved', []));
+          rem.add(item.id);
+          ss(currentTrip, tab+'DayofRemoved', [...rem]);
+        }
+      } else {
+        s.add(item.id);
+        // If re-adding a builtin flag, remove from the removed tracking
+        const rem = new Set(gs(currentTrip, tab+'DayofRemoved', []));
+        rem.delete(item.id);
+        ss(currentTrip, tab+'DayofRemoved', [...rem]);
+      }
+      ss(currentTrip, tab+'Dayof', [...s]);
+      li.classList.toggle('dayof', s.has(item.id) || (builtinDayofSet.has(item.id) && !gs(currentTrip, tab+'DayofRemoved', []).includes(item.id)));
+      closeCtxMenu();
+    };
+    menu.querySelector('#cm-toggle').onclick = () => { toggleItem(item.id, tab); closeCtxMenu(); };
+    menu.querySelector('#cm-edit').onclick = () => { closeCtxMenu(); openEditModal(item, tab, item.catId); };
+    menu.querySelector('#cm-remove').onclick = () => { removeItemFromTrip(item.id, tab); closeCtxMenu(); };
+    if (tab === 'pack') {
+      menu.querySelector('#cm-todo').onclick = () => { closeCtxMenu(); openSuggestModal(item); };
+    }
+    positionMenu(menu, e);
+    document.body.appendChild(menu); ctxMenu = menu;
+  };
+  li.addEventListener('contextmenu', handler);
+  li.addEventListener('touchstart', e=>{ pressTimer=setTimeout(()=>handler(e),500); },{passive:true});
+  li.addEventListener('touchend', ()=>clearTimeout(pressTimer));
+  li.addEventListener('touchmove', ()=>clearTimeout(pressTimer));
+}
+
+// ═══════════════════════════════════
+// TODO SUGGESTION MODAL
+// ═══════════════════════════════════
+let suggestState = { item: null, suggestions: [] };
+
+const TODO_CAT_GENERAL = 'prep_general';
+const TODO_CAT_DAYOF   = 'prep_dayof';
+
+function ensureTodoCats() {
+  if (!MASTER_CATS[TODO_CAT_GENERAL]) {
+    MASTER_CATS[TODO_CAT_GENERAL] = { id:TODO_CAT_GENERAL, icon:'📋', title:'General Prep', tab:'todo' };
+  }
+  if (!MASTER_CATS[TODO_CAT_DAYOF]) {
+    MASTER_CATS[TODO_CAT_DAYOF] = { id:TODO_CAT_DAYOF, icon:'☀️', title:'Day-of Prep', tab:'todo' };
+  }
+}
+
+function getTodoCats() {
+  ensureTodoCats();
+  return Object.values(MASTER_CATS).filter(c=>c.tab==='todo');
+}
+
+function isItemDayof(itemId) {
+  const builtin = new Set(TRIP_DEFAULTS[currentTrip]?.defaultDayof || []);
+  const custom = new Set(gs(currentTrip, 'packDayof', []));
+  return builtin.has(itemId) || custom.has(itemId);
+}
+
+function populateTodoCatSelect(selectId, newcatFieldId, defaultCatId) {
+  const sel = document.getElementById(selectId);
+  const cats = getTodoCats();
+  sel.innerHTML = cats.map(c=>`<option value="${c.id}"${c.id===defaultCatId?' selected':''}>${c.icon} ${c.title}</option>`).join('');
+  sel.innerHTML += `<option value="__new__">+ New category…</option>`;
+  const field = document.getElementById(newcatFieldId);
+  sel.onchange = () => { if (field) field.style.display = sel.value==='__new__'?'block':'none'; };
+  if (field) field.style.display = 'none';
+}
+
+async function openSuggestModal(item) {
+  suggestState = { item, suggestions: [] };
+  ensureTodoCats();
+
+  const isDayof = isItemDayof(item.id);
+  const defaultCat = isDayof ? TODO_CAT_DAYOF : TODO_CAT_GENERAL;
+
+  document.getElementById('suggest-title').textContent = `To-Do Tasks for "${item.name}"`;
+  document.getElementById('suggest-subtitle').textContent = isDayof
+    ? '☀️ Day-of item — defaulting to Day-of Prep category'
+    : 'General prep item';
+  document.getElementById('suggest-list').innerHTML = '<div class="suggest-loading">✨ Generating suggestions…</div>';
+  document.getElementById('suggest-custom-input').value = '';
+  populateTodoCatSelect('suggest-cat-select', 'suggest-newcat-input', defaultCat);
+  document.getElementById('suggest-modal').classList.add('visible');
+
+  // Call Claude API for suggestions
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        system: 'You are a helpful travel packing assistant. Given a packing list item, suggest 3-6 concise to-do tasks someone should complete before a trip related to that item. Tasks should be specific and actionable — things like "Charge X", "Pack X in carry-on", "Buy replacement Y", "Download Z offline", etc. Return ONLY a JSON array of strings, no markdown, no explanation. Example: ["Charge tablet fully","Download offline maps","Pack tablet charger in carry-on"]',
+        messages: [{ role: 'user', content: `Packing list item: "${item.name}". It is ${isDayof ? 'a day-of item (something that must be packed the morning of departure)' : 'a regular item'}. Suggest to-do tasks.` }]
+      })
+    });
+    const data = await response.json();
+    const text = data.content?.[0]?.text || '[]';
+    const clean = text.replace(/```json|```/g,'').trim();
+    suggestState.suggestions = JSON.parse(clean);
+  } catch(e) {
+    suggestState.suggestions = [`Pack ${item.name}`, `Check ${item.name} is working`];
+  }
+
+  renderSuggestions();
+}
+
+function renderSuggestions() {
+  const list = document.getElementById('suggest-list');
+  if (!suggestState.suggestions.length) {
+    list.innerHTML = '<div class="suggest-loading">No suggestions found. Add a custom task below.</div>';
+    return;
+  }
+  list.innerHTML = suggestState.suggestions.map((s, i) => `
+    <label class="suggest-item">
+      <input type="checkbox" value="${i}" checked>
+      <span class="suggest-item-text">${s}</span>
+    </label>
+  `).join('');
+}
+
+function onSuggestCatChange() {
+  const sel = document.getElementById('suggest-cat-select');
+  const field = document.getElementById('suggest-newcat-input');
+  field.style.display = sel.value === '__new__' ? 'block' : 'none';
+}
+
+async function submitSuggestions() {
+  const catSel = document.getElementById('suggest-cat-select');
+  let catId = catSel.value;
+
+  if (catId === '__new__') {
+    const newName = document.getElementById('suggest-newcat-input').value.trim();
+    if (!newName) return;
+    catId = 'cat_' + Date.now();
+    MASTER_CATS[catId] = { id:catId, icon:'📋', title:newName, tab:'todo' };
+    saveMasterCats();
+  }
+
+  // Add checked suggestions
+  const checks = document.querySelectorAll('#suggest-list input[type=checkbox]:checked');
+  checks.forEach(cb => {
+    const text = suggestState.suggestions[parseInt(cb.value)];
+    if (text) addTodoItem(text, catId);
+  });
+
+  // Add custom task if filled
+  const custom = document.getElementById('suggest-custom-input').value.trim();
+  if (custom) addTodoItem(custom, catId);
+
+  closeAllModals();
+  // Switch to todo tab to show result
+  switchTab('todo', document.getElementById('tab-btn-todo'));
+  renderTab('todo');
+}
+
+function addTodoItem(name, catId) {
+  let item = MASTER_ITEMS.find(i=>i.name.toLowerCase()===name.toLowerCase()&&i.tab==='todo');
+  if (!item) {
+    item = { id:'t_'+Date.now()+'_'+Math.random().toString(36).slice(2,6), name, catId, tab:'todo' };
+    MASTER_ITEMS.push(item);
+    saveMasterItems();
+  }
+  addItemToTrip(item.id, 'todo');
+}
+
+// ═══════════════════════════════════
+// EDIT TODO ITEM MODAL
+// ═══════════════════════════════════
+let editTodoState = {};
+
+function openEditTodoModal(item) {
+  editTodoState = { item };
+  document.getElementById('edit-todo-name').value = item.name;
+  populateTodoCatSelect('edit-todo-cat', 'edit-todo-newcat-field', item.catId);
+  // Wire the onchange for this select specifically
+  document.getElementById('edit-todo-cat').onchange = onEditTodoCatChange;
+  document.getElementById('edit-todo-modal').classList.add('visible');
+  setTimeout(()=>document.getElementById('edit-todo-name').focus(), 50);
+}
+
+function onEditTodoCatChange() {
+  const sel = document.getElementById('edit-todo-cat');
+  document.getElementById('edit-todo-newcat-field').style.display = sel.value==='__new__'?'block':'none';
+}
+
+function saveTodoEdit() {
+  const newName = document.getElementById('edit-todo-name').value.trim();
+  if (!newName) return;
+  const catSel = document.getElementById('edit-todo-cat');
+  let newCatId = catSel.value;
+  if (newCatId === '__new__') {
+    const newCatName = document.getElementById('edit-todo-newcat').value.trim();
+    if (!newCatName) return;
+    newCatId = 'cat_'+Date.now();
+    MASTER_CATS[newCatId] = { id:newCatId, icon:'📋', title:newCatName, tab:'todo' };
+    saveMasterCats();
+  }
+  const item = MASTER_ITEMS.find(i=>i.id===editTodoState.item.id);
+  if (item) {
+    // Log the edit before applying it
+    logEdit({ id: item.id, oldName: item.name, newName, oldCatId: item.catId, newCatId, tab: 'todo' });
+    item.name = newName;
+    item.catId = newCatId;
+  }
+  saveMasterItems();
+  closeAllModals();
+  renderTab('todo');
+}
+
+function openConfirmDeleteTodo() {
+  const item = editTodoState.item;
+  document.getElementById('confirm-todo-msg').innerHTML = `<strong>"${item.name}"</strong> will be permanently removed from the library and all trips. This cannot be undone.`;
+  document.getElementById('confirm-delete-todo-modal').classList.add('visible');
+}
+
+function permanentlyDeleteTodoItem() {
+  const item = editTodoState.item;
+  // Log deletion before removing
+  const deleted = gs('__meta__', 'permanentlyDeleted', []);
+  deleted.push({ id: item.id, name: item.name, catId: item.catId, tab: item.tab, deletedAt: Date.now() });
+  ss('__meta__', 'permanentlyDeleted', deleted);
+
+  MASTER_ITEMS = MASTER_ITEMS.filter(i=>i.id!==item.id);
+  saveMasterItems();
+  getTripList().forEach(tripId => {
+    const ids = getActiveIds(tripId,'todo').filter(id=>id!==item.id);
+    setActiveIds(tripId,'todo',ids);
+    const checked = gs(tripId,'todoChecked',{});
+    delete checked[item.id];
+    ss(tripId,'todoChecked',checked);
+  });
+  closeAllModals();
+  renderTab('todo');
+}
+
+// Wire todo item long-press edit into renderTab via attachTodoCtx
+function attachTodoCtx(li, item) {
+  const handler = e => {
+    e.preventDefault(); closeCtxMenu();
+    const checked = gs(currentTrip,'todoChecked',{});
+    const isChecked = !!checked[item.id];
+    const menu = document.createElement('div');
+    menu.className = 'ctx-menu';
+    menu.innerHTML = `
+      <div class="ctx-item" id="ctd-toggle">${isChecked?'☐ Uncheck':'☑ Check'}</div>
+      <div class="ctx-divider"></div>
+      <div class="ctx-item" id="ctd-edit">✏️ Edit task</div>
+      <div class="ctx-divider"></div>
+      <div class="ctx-item danger" id="ctd-remove">✕ Remove from list</div>
+    `;
+    menu.querySelector('#ctd-toggle').onclick = () => { toggleItem(item.id,'todo'); closeCtxMenu(); };
+    menu.querySelector('#ctd-edit').onclick = () => { closeCtxMenu(); openEditTodoModal(item); };
+    menu.querySelector('#ctd-remove').onclick = () => { removeItemFromTrip(item.id,'todo'); closeCtxMenu(); };
+    positionMenu(menu, e);
+    document.body.appendChild(menu); ctxMenu = menu;
+  };
+  li.addEventListener('contextmenu', handler);
+  li.addEventListener('touchstart', e=>{ pressTimer=setTimeout(()=>handler(e),500); },{passive:true});
+  li.addEventListener('touchend', ()=>clearTimeout(pressTimer));
+  li.addEventListener('touchmove', ()=>clearTimeout(pressTimer));
+}
+function openEditModal(item, tab, catId) {
+  editState = { item, tab, catId };
+  document.getElementById('edit-item-name').value = item.name;
+
+  const catSel = document.getElementById('edit-item-cat');
+  const cats = Object.values(MASTER_CATS).filter(c=>c.tab===tab);
+  catSel.innerHTML = cats.map(c=>`<option value="${c.id}"${c.id===catId?' selected':''}>${c.icon} ${c.title}</option>`).join('');
+  catSel.innerHTML += `<option value="__new__">+ New category…</option>`;
+  catSel.onchange = () => {
+    document.getElementById('new-cat-field').style.display = catSel.value==='__new__' ? 'block' : 'none';
+  };
+  document.getElementById('new-cat-field').style.display = 'none';
+  document.getElementById('edit-item-modal').classList.add('visible');
+  setTimeout(() => document.getElementById('edit-item-name').focus(), 50);
+}
+
+function saveItemEdit() {
+  const newName = document.getElementById('edit-item-name').value.trim();
+  if (!newName) return;
+  const catSel = document.getElementById('edit-item-cat');
+  let newCatId = catSel.value;
+
+  if (newCatId === '__new__') {
+    const newCatName = document.getElementById('edit-new-cat').value.trim();
+    if (!newCatName) return;
+    newCatId = 'cat_'+Date.now();
+    MASTER_CATS[newCatId] = { id:newCatId, icon:'📌', title:newCatName, tab:editState.tab };
+    saveMasterCats();
+  }
+
+  // Update name globally across all items with same id
+  const item = MASTER_ITEMS.find(i=>i.id===editState.item.id);
+  if (item) {
+    // Log the edit before applying it
+    logEdit({ id: item.id, oldName: item.name, newName, oldCatId: item.catId, newCatId, tab: item.tab });
+    item.name = newName;
+    item.catId = newCatId;
+  }
+  saveMasterItems();
+  closeAllModals();
+  renderAll();
+}
+
+function openConfirmDelete() {
+  const item = editState.item;
+  document.getElementById('confirm-msg').innerHTML = `<strong>"${item.name}"</strong> will be permanently removed from the item library and from all trips. This cannot be undone.`;
+  document.getElementById('confirm-delete-modal').classList.add('visible');
+}
+
+function permanentlyDeleteItem() {
+  const item = editState.item;
+  // Log deletion before removing
+  const deleted = gs('__meta__', 'permanentlyDeleted', []);
+  deleted.push({ id: item.id, name: item.name, catId: item.catId, tab: item.tab, deletedAt: Date.now() });
+  ss('__meta__', 'permanentlyDeleted', deleted);
+
+  MASTER_ITEMS = MASTER_ITEMS.filter(i=>i.id!==item.id);
+  saveMasterItems();
+  getTripList().forEach(tripId => {
+    ['pack','todo'].forEach(tab => {
+      const ids = getActiveIds(tripId, tab).filter(id=>id!==item.id);
+      setActiveIds(tripId, tab, ids);
+      const checked = gs(tripId, tab+'Checked', {});
+      delete checked[item.id];
+      ss(tripId, tab+'Checked', checked);
+    });
+  });
+  closeAllModals();
+  renderAll();
+}
+
+// ═══════════════════════════════════
+// PROGRESS
+// ═══════════════════════════════════
+function updateProgress(tab) {
+  const activeIds = new Set(getActiveIds(currentTrip, tab));
+  const checked = gs(currentTrip, tab+'Checked', {});
+  const total = [...activeIds].filter(id=>itemsForTab(tab).some(i=>i.id===id)).length;
+  const done = [...activeIds].filter(id=>checked[id]).length;
+
+  document.getElementById(`${tab}-done`).textContent = done;
+  document.getElementById(`${tab}-total`).textContent = total;
+  document.getElementById(`${tab}-bar`).style.width = total?(done/total*100)+'%':'0%';
+  document.getElementById(`${tab}-all-done`).style.display = done===total&&total>0?'block':'none';
+
+  // Per-cat counts
+  allCatIds(tab).forEach(catId => {
+    const el = document.getElementById(`cnt-${tab}-${catId}`);
+    if (!el) return;
+    const catItems = itemsForTab(tab).filter(i=>i.catId===catId&&activeIds.has(i.id));
+    const t = catItems.length, d = catItems.filter(i=>checked[i.id]).length;
+    el.textContent = d>0?`${d}/${t}`:'';
+    el.style.color = d===t&&d>0?'var(--green)':'var(--muted)';
+  });
+
+  const label = tab==='pack'?'items':'tasks';
+  const catCount = allCatIds(tab).filter(cid=>itemsForTab(tab).some(i=>i.catId===cid&&activeIds.has(i.id))).length;
+  document.getElementById(`${tab}-footer`).textContent = `${total} ${label} · ${catCount} categories`;
+}
+
+function resetTab(tab) {
+  ss(currentTrip, tab+'Checked', {});
+  renderTab(tab);
+}
+
+// ═══════════════════════════════════
+// NEW TRIP
+// ═══════════════════════════════════
+function openNewTripModal() {
+  document.getElementById('new-trip-name').value='';
+  document.getElementById('new-trip-modal').classList.add('visible');
+  setTimeout(()=>document.getElementById('new-trip-name').focus(),50);
+}
+function createTrip() {
+  const name = document.getElementById('new-trip-name').value.trim();
+  if (!name) return;
+  const id = 'trip_'+Date.now();
+  ss(id,'name',name);
+  // Start with essentials active
+  const packStarter = ['i_keys','i_phone','i_wallet','i_etoothbrush','i_hygi'];
+  const todoStarter = ['t_sheets','t_laundry','t_vacuum','t_packvan','t_shave','t_shower','t_tillybath'];
+  setActiveIds(id,'pack',packStarter);
+  setActiveIds(id,'todo',todoStarter);
+  const trips = getTripList(); trips.push(id); saveTripList(trips);
+  closeAllModals();
+  currentTrip=id; buildTripSelect(); renderAll();
+}
+
+// ═══════════════════════════════════
+// EDITS MODAL
+// ═══════════════════════════════════
+function buildDiff() {
+  const tripName = getTripName(currentTrip);
+  const diff = { trip:currentTrip, tripName, changes:[] };
+
+  ['pack','todo'].forEach(tab => {
+    const activeIds = new Set(getActiveIds(currentTrip, tab));
+    const defaultIds = new Set(TRIP_DEFAULTS[currentTrip]?.[tab]||[]);
+    const builtinDayof = new Set(TRIP_DEFAULTS[currentTrip]?.defaultDayof||[]);
+    const customDayof = new Set(gs(currentTrip,tab+'Dayof',[]));
+    const removedDayof = new Set(gs(currentTrip, tab+'DayofRemoved', []));
+    const checked = gs(currentTrip,tab+'Checked',{});
+
+    [...activeIds].filter(id=>!defaultIds.has(id)).forEach(id=>{
+      const item=getItem(id); if(!item)return;
+      const cat=getCat(item.catId);
+      diff.changes.push({type:'added',tab,cat:cat?.title||item.catId,catId:item.catId,item:item.name});
+    });
+    [...defaultIds].filter(id=>!activeIds.has(id)).forEach(id=>{
+      const item=getItem(id); if(!item)return;
+      const cat=getCat(item.catId);
+      diff.changes.push({type:'removed',tab,cat:cat?.title||item.catId,catId:item.catId,item:item.name});
+    });
+    Object.keys(checked).forEach(id=>{
+      const item=getItem(id); if(!item)return;
+      const cat=getCat(item.catId);
+      diff.changes.push({type:'checked',tab,cat:cat?.title||item.catId,catId:item.catId,item:item.name});
+    });
+    [...customDayof].filter(id=>!builtinDayof.has(id)).forEach(id=>{
+      const item=getItem(id); if(!item)return;
+      const cat=getCat(item.catId);
+      diff.changes.push({type:'dayof',tab,cat:cat?.title||item.catId,catId:item.catId,item:item.name});
+    });
+    [...builtinDayof].filter(id=>removedDayof.has(id)).forEach(id=>{
+      const item=getItem(id); if(!item)return;
+      const cat=getCat(item.catId);
+      diff.changes.push({type:'dayof_removed',tab,cat:cat?.title||item.catId,catId:item.catId,item:item.name});
+    });
+  });
+
+  // Permanently deleted items
+  const deleted = gs('__meta__', 'permanentlyDeleted', []);
+  deleted.forEach(item=>{
+    diff.changes.push({type:'deleted',tab:item.tab,cat:item.catId,catId:item.catId,item:item.name});
+  });
+
+  // Explicit name/category edits
+  try {
+    const edits = JSON.parse(localStorage.getItem('editLog') || '[]');
+    const seen = new Set();
+    edits.forEach(e => {
+      const dedup = `${e.id}:${e.newName}:${e.newCatId}`;
+      if (seen.has(dedup)) return;
+      seen.add(dedup);
+      const newCat = getCat(e.newCatId);
+      const oldCat = getCat(e.oldCatId);
+      let desc = `"${e.oldName}"`;
+      if (e.oldName !== e.newName) desc += ` → "${e.newName}"`;
+      if (e.oldCatId !== e.newCatId) desc += ` (${oldCat?.title||e.oldCatId} → ${newCat?.title||e.newCatId})`;
+      diff.changes.push({ type:'edited', tab: e.tab, cat: newCat?.title||e.newCatId, catId: e.newCatId, item: desc });
+    });
+  } catch(err) {}
+
+  // Raw change log — catches everything else (name edits, cat changes, etc.)
+  const structuredKeys = new Set(['packActive','todoActive','packChecked','todoChecked',
+    'packDayof','todoDayof','packDayofRemoved','todoDayofRemoved']);
+  try {
+    const log = JSON.parse(localStorage.getItem('changeLog') || '[]');
+    const seenItems = new Set(); // dedupe by item id+name+catId
+
+    // Find the latest masterItems snapshot in the log
+    const librarySnaps = log.filter(e=>e.trip==='__library__' && e.key==='masterItems');
+    if (librarySnaps.length) {
+      const latest = librarySnaps[librarySnaps.length - 1].val;
+      // Compare against MASTER_ITEMS as initially defined (before any runtime edits)
+      // We detect edits by comparing latest snapshot to current in-memory state
+      // Show any item whose name or catId differs from what the defaults would expect
+      const defaultItemNames = new Map();
+      // Build a reference from the original hardcoded MASTER_ITEMS (before any saves)
+      // We stored them so compare the log snap to current MASTER_ITEMS
+      latest.forEach(logItem => {
+        const current = MASTER_ITEMS.find(i=>i.id===logItem.id);
+        if (!current) {
+          // Item was in log snapshot but deleted since — already caught by deleted log
+          return;
+        }
+        if (current.name !== logItem.name || current.catId !== logItem.catId) {
+          // Name or cat changed between this log entry and current state
+          const cat = getCat(current.catId);
+          const dedup = `edit:${current.id}:${current.name}:${current.catId}`;
+          if (!seenItems.has(dedup)) {
+            seenItems.add(dedup);
+            diff.changes.push({
+              type:'raw', tab: current.tab, cat: cat?.title||current.catId, catId: current.catId,
+              item: `Renamed/moved: "${logItem.name}" → "${current.name}"${logItem.catId!==current.catId?' (cat changed)':''}`
+            });
+          }
+        }
+      });
+    }
+
+    // Also catch any other non-library, non-structured trip-level writes
+    log.filter(e=>e.trip===currentTrip && !structuredKeys.has(e.key)).forEach(e=>{
+      const dedup = `${e.key}:${JSON.stringify(e.val)}`;
+      if (seenItems.has(dedup)) return;
+      seenItems.add(dedup);
+      diff.changes.push({type:'raw', tab:'—', cat:'—', catId:'', item:`${e.key}: ${JSON.stringify(e.val)}`});
+    });
+  } catch(err) {}
+
+  return diff;
+}
+
+function openEditsModal() {
+  const diff = buildDiff();
+  const body = document.getElementById('edits-body');
+  const jsonEl = document.getElementById('edits-json');
+  const typeGroups = {added:[],removed:[],checked:[],dayof:[],dayof_removed:[],deleted:[],edited:[],raw:[]};
+  diff.changes.forEach(c=>typeGroups[c.type].push(c));
+  const typeLabels = {
+    added:        {label:'✚ Added',                tag:'added',   tagText:'added'},
+    removed:      {label:'✕ Removed from list',    tag:'removed', tagText:'removed'},
+    checked:      {label:'☑ Checked',              tag:'checked', tagText:'checked'},
+    dayof:        {label:'☀️ Day-of Flags Added',   tag:'dayof',   tagText:'day-of'},
+    dayof_removed:{label:'☀️ Day-of Flags Removed', tag:'removed', tagText:'dayof-removed'},
+    deleted:      {label:'🗑 Permanently Deleted',  tag:'removed', tagText:'deleted'},
+    edited:       {label:'✏️ Renamed / Moved',       tag:'added',   tagText:'edited'},
+    raw:          {label:'📝 Other Changes',         tag:'added',   tagText:'change'},
+  };
+  let html = `<p style="font-size:0.72rem;color:var(--muted);letter-spacing:0.05em;text-transform:uppercase;margin-bottom:1rem">Trip: <strong style="color:var(--ink)">${diff.tripName}</strong> &nbsp;·&nbsp; ${diff.changes.length} change${diff.changes.length!==1?'s':''}</p>`;
+  if (!diff.changes.length) {
+    html += `<p style="font-size:0.85rem;color:var(--muted);font-style:italic">No changes from default.</p>`;
+  } else {
+    Object.entries(typeGroups).forEach(([type,items])=>{
+      if(!items.length)return;
+      const {label,tag,tagText}=typeLabels[type];
+      html+=`<div class="edits-section"><div class="edits-section-title">${label}</div>`;
+      items.forEach(c=>{
+        html+=`<div class="edits-item"><span class="edits-tag tag-${tag}">${tagText}</span><span style="flex:1">${c.item}</span><span class="edits-cat">${c.tab==='pack'?'📦':'✅'} ${c.cat}</span></div>`;
+      });
+      html+=`</div>`;
+    });
+  }
+  body.innerHTML = html;
+  const json = JSON.stringify(diff,null,2);
+  jsonEl.textContent = json;
+  try { navigator.clipboard.writeText(json).catch(()=>{}); } catch(e){}
+  document.getElementById('edits-modal').classList.add('visible');
+  document.getElementById('copy-btn').textContent='Copy';
+  document.getElementById('copy-btn').classList.remove('copied');
+}
+function closeEditsModal() { document.getElementById('edits-modal').classList.remove('visible'); }
+function copyEditsJson() {
+  const json = document.getElementById('edits-json').textContent;
+  const btn = document.getElementById('copy-btn');
+  if (navigator.clipboard&&window.isSecureContext) {
+    navigator.clipboard.writeText(json).then(()=>{btn.textContent='Copied!';btn.classList.add('copied');setTimeout(()=>{btn.textContent='Copy';btn.classList.remove('copied');},2000);}).catch(()=>fallbackCopy(json,btn));
+  } else { fallbackCopy(json,btn); }
+}
+function fallbackCopy(text,btn) {
+  const ta=document.createElement('textarea'); ta.value=text; ta.style.cssText='position:fixed;top:0;left:0;opacity:0;';
+  document.body.appendChild(ta); ta.focus(); ta.select(); ta.setSelectionRange(0,ta.value.length);
+  let ok=false; try{ok=document.execCommand('copy');}catch(e){}
+  document.body.removeChild(ta);
+  if(ok){btn.textContent='Copied!';btn.classList.add('copied');setTimeout(()=>{btn.textContent='Copy';btn.classList.remove('copied');},2000);}
+  else{const el=document.getElementById('edits-json');const r=document.createRange();r.selectNodeContents(el);window.getSelection().removeAllRanges();window.getSelection().addRange(r);btn.textContent='Select ↑';setTimeout(()=>btn.textContent='Copy',3000);}
+}
+document.getElementById('edits-modal').addEventListener('click',e=>{if(e.target===document.getElementById('edits-modal'))closeEditsModal();});
+
+// ═══════════════════════════════════
+// MODAL HELPERS
+// ═══════════════════════════════════
+function closeAllModals() {
+  document.querySelectorAll('.overlay').forEach(o=>o.classList.remove('visible'));
+}
+document.querySelectorAll('.overlay').forEach(o=>{
+  o.addEventListener('click',e=>{ if(e.target===o)closeAllModals(); });
+});
+
+// ═══════════════════════════════════
+// ADD ROW HELPERS (inline new items)
+// ═══════════════════════════════════
+function showAddRow(tab, catId) {
+  const row = document.getElementById(`addrow-${tab}-${catId}`);
+  if (!row) return;
+  row.classList.add('visible');
+  const inp = document.getElementById(`addinput-${tab}-${catId}`);
+  if (inp) { inp.value = ''; inp.focus(); }
+}
+function hideAddRow(tab, catId) {
+  const row = document.getElementById(`addrow-${tab}-${catId}`);
+  if (row) row.classList.remove('visible');
+}
+function confirmAdd(tab, catId) {
+  const inp = document.getElementById(`addinput-${tab}-${catId}`);
+  if (!inp) return;
+  const name = inp.value.trim();
+  if (!name) { hideAddRow(tab, catId); return; }
+  const prefix = tab === 'todo' ? 't_' : 'i_';
+  const id = prefix + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+  MASTER_ITEMS.push({ id, name, catId, tab });
+  saveMasterItems();
+  addItemToTrip(id, tab);
+  hideAddRow(tab, catId);
+}
+
+// ═══════════════════════════════════
+// SUPABASE CONFIG
+// ═══════════════════════════════════
+// Fill in your Supabase project URL and anon key here.
+// Leave as-is to run in local-only mode (no auth, no sync).
+const SUPABASE_URL      = 'https://ycuuxnscbxiibsnefgef.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_oVIOiEk8gNhTfczh2W86bA_f1NnEsCF';
+const SUPABASE_CONFIGURED = !SUPABASE_URL.startsWith('YOUR_');
+
+// ═══════════════════════════════════
+// AUTH UI
+// ═══════════════════════════════════
+function showAuthForm() {
+  document.getElementById('auth-loading').style.display = 'none';
+  document.getElementById('auth-form').style.display = '';
+  setTimeout(() => document.getElementById('auth-email').focus(), 100);
+}
+function hideAuthOverlay() {
+  document.getElementById('auth-overlay').style.display = 'none';
+  if (SUPABASE_CONFIGURED) {
+    document.getElementById('signout-btn').style.display = '';
+  }
+}
+
+let _authMode = 'signin';
+function toggleAuthMode() {
+  _authMode = _authMode === 'signin' ? 'signup' : 'signin';
+  document.getElementById('auth-mode-text').textContent   = _authMode === 'signin' ? 'New here?' : 'Already have an account?';
+  document.getElementById('auth-mode-toggle').textContent = _authMode === 'signin' ? 'Create an account' : 'Sign in instead';
+  document.getElementById('auth-signup-btn').style.display = _authMode === 'signup' ? '' : 'none';
+  document.getElementById('auth-signin-btn').style.display = _authMode === 'signin' ? '' : 'none';
+  document.getElementById('auth-error').textContent = '';
+}
+
+function _setAuthError(msg) { document.getElementById('auth-error').textContent = msg; }
+
+async function authSignIn() {
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  if (!email || !password) { _setAuthError('Enter your email and password.'); return; }
+  const btn = document.getElementById('auth-signin-btn');
+  btn.textContent = 'Signing in…'; btn.disabled = true;
+  _setAuthError('');
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  btn.textContent = 'Sign in →'; btn.disabled = false;
+  if (error) { _setAuthError(error.message); return; }
+  await onAuthSuccess(data.user);
+}
+
+async function authSignUp() {
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  if (!email || !password) { _setAuthError('Enter your email and password.'); return; }
+  if (password.length < 6) { _setAuthError('Password must be at least 6 characters.'); return; }
+  const btn = document.getElementById('auth-signup-btn');
+  btn.textContent = 'Creating…'; btn.disabled = true;
+  _setAuthError('');
+  const { data, error } = await supabase.auth.signUp({ email, password });
+  btn.textContent = 'Create account'; btn.disabled = false;
+  if (error) { _setAuthError(error.message); return; }
+  if (data.user && !data.session) {
+    // Email confirmation required
+    const errEl = document.getElementById('auth-error');
+    errEl.style.color = 'var(--green)';
+    errEl.textContent = 'Check your email to confirm your account, then sign in.';
+    return;
+  }
+  await onAuthSuccess(data.user);
+}
+
+async function authSignOut() {
+  if (supabase) await supabase.auth.signOut();
+  currentUserId = null;
+  location.reload();
+}
+
+async function onAuthSuccess(user) {
+  currentUserId = user.id;
+  document.getElementById('auth-loading').style.display = '';
+  document.getElementById('auth-form').style.display = 'none';
+  await loadUserData(user.id);
+  hideAuthOverlay();
+  init();
+}
+
+// ═══════════════════════════════════
+// SUPABASE DATA LOAD
+// ═══════════════════════════════════
+async function loadUserData(userId) {
+  if (!supabase) return;
+  try {
+    // Check if user already has trips in Supabase
+    const { data: existingTrips } = await supabase
+      .from('trips').select('id').eq('user_id', userId).limit(1);
+
+    if (!existingTrips || existingTrips.length === 0) {
+      // First login — migrate existing localStorage data up to Supabase
+      await pushAllToSupabase(userId);
+      return;
+    }
+
+    // Load master items
+    const { data: items } = await supabase
+      .from('master_items').select('*').eq('user_id', userId);
+    if (items && items.length) {
+      localStorage.setItem('masterItems', JSON.stringify(
+        items.map(r => ({ id:r.id, name:r.name, catId:r.cat_id, tab:r.tab,
+          ...(r.subcat_label ? { subcatLabel: r.subcat_label } : {}) }))
+      ));
+    }
+
+    // Load master categories
+    const { data: cats } = await supabase
+      .from('master_cats').select('*').eq('user_id', userId);
+    if (cats && cats.length) {
+      localStorage.setItem('masterCats', JSON.stringify(
+        cats.map(r => ({ id:r.id, icon:r.icon, title:r.title, tab:r.tab }))
+      ));
+    }
+
+    // Load trips list + names
+    const { data: trips } = await supabase
+      .from('trips').select('*').eq('user_id', userId);
+    if (trips && trips.length) {
+      localStorage.setItem(sk('__meta__','trips'), JSON.stringify(trips.map(t => t.id)));
+      trips.forEach(t => localStorage.setItem(sk(t.id,'name'), JSON.stringify(t.name)));
+    }
+
+    // Load trip states
+    const { data: states } = await supabase
+      .from('trip_state').select('*').eq('user_id', userId);
+    if (states) {
+      states.forEach(s => {
+        const set = (k, v) => { if (v != null) localStorage.setItem(sk(s.trip_id, k), JSON.stringify(v)); };
+        set('packActive',        s.pack_active);
+        set('todoActive',        s.todo_active);
+        set('packChecked',       s.pack_checked);
+        set('todoChecked',       s.todo_checked);
+        set('packDayof',         s.pack_dayof);
+        set('todoDayof',         s.todo_dayof);
+        set('packDayofRemoved',  s.pack_dayof_removed);
+        set('todoDayofRemoved',  s.todo_dayof_removed);
+      });
+    }
+
+    // Load user meta (lastTrip, deleted items, logs)
+    const { data: meta } = await supabase
+      .from('user_meta').select('*').eq('user_id', userId).maybeSingle();
+    if (meta) {
+      if (meta.last_trip)            localStorage.setItem(sk('__meta__','lastTrip'),          JSON.stringify(meta.last_trip));
+      if (meta.permanently_deleted)  localStorage.setItem(sk('__meta__','permanentlyDeleted'), JSON.stringify(meta.permanently_deleted));
+      if (meta.change_log)           localStorage.setItem('changeLog',                         JSON.stringify(meta.change_log));
+      if (meta.edit_log)             localStorage.setItem('editLog',                           JSON.stringify(meta.edit_log));
+    }
+  } catch(e) {
+    console.error('Failed to load from Supabase:', e);
+  }
+}
+
+// First-login migration: push current localStorage state to Supabase
+async function pushAllToSupabase(userId) {
+  if (!supabase || !userId) return;
+  try {
+    const items = JSON.parse(localStorage.getItem('masterItems') || 'null');
+    if (items && items.length) {
+      await supabase.from('master_items').upsert(
+        items.map(i => ({ user_id:userId, id:i.id, name:i.name, cat_id:i.catId, tab:i.tab, subcat_label:i.subcatLabel||null }))
+      );
+    }
+    const cats = JSON.parse(localStorage.getItem('masterCats') || 'null');
+    if (cats && cats.length) {
+      await supabase.from('master_cats').upsert(
+        cats.map(c => ({ user_id:userId, id:c.id, icon:c.icon, title:c.title, tab:c.tab }))
+      );
+    }
+    const tripList = JSON.parse(localStorage.getItem(sk('__meta__','trips')) || '["salem","birthday"]');
+    if (tripList.length) {
+      await supabase.from('trips').upsert(
+        tripList.map(id => ({ user_id:userId, id,
+          name: JSON.parse(localStorage.getItem(sk(id,'name'))||'null') || TRIP_DEFAULTS[id]?.name || id }))
+      );
+      const stateRows = tripList.map(tripId => {
+        const ga = k => { const v = localStorage.getItem(sk(tripId,k)); return v ? JSON.parse(v) : null; };
+        return {
+          user_id: userId, trip_id: tripId,
+          pack_active:        ga('packActive'),
+          todo_active:        ga('todoActive'),
+          pack_checked:       ga('packChecked')       || {},
+          todo_checked:       ga('todoChecked')       || {},
+          pack_dayof:         ga('packDayof')         || [],
+          todo_dayof:         ga('todoDayof')         || [],
+          pack_dayof_removed: ga('packDayofRemoved')  || [],
+          todo_dayof_removed: ga('todoDayofRemoved')  || []
+        };
+      });
+      await supabase.from('trip_state').upsert(stateRows);
+    }
+    await supabase.from('user_meta').upsert({
+      user_id:              userId,
+      last_trip:            JSON.parse(localStorage.getItem(sk('__meta__','lastTrip'))          || 'null'),
+      permanently_deleted:  JSON.parse(localStorage.getItem(sk('__meta__','permanentlyDeleted'))|| '[]'),
+      change_log:           JSON.parse(localStorage.getItem('changeLog')                        || '[]'),
+      edit_log:             JSON.parse(localStorage.getItem('editLog')                          || '[]')
+    });
+  } catch(e) {
+    console.error('Failed to migrate localStorage to Supabase:', e);
+  }
+}
+
+// ═══════════════════════════════════
+// SUPABASE WRITE HELPERS
+// ═══════════════════════════════════
+function queueTripSync(tripId) {
+  if (!supabase || !currentUserId) return;
+  if (_pendingTripSync[tripId]) clearTimeout(_pendingTripSync[tripId]);
+  _pendingTripSync[tripId] = setTimeout(() => _flushTripState(tripId), 600);
+}
+async function _flushTripState(tripId) {
+  if (!supabase || !currentUserId) return;
+  const ga = k => { const v = localStorage.getItem(sk(tripId,k)); return v ? JSON.parse(v) : null; };
+  try {
+    await supabase.from('trip_state').upsert({
+      user_id:            currentUserId,
+      trip_id:            tripId,
+      pack_active:        ga('packActive'),
+      todo_active:        ga('todoActive'),
+      pack_checked:       ga('packChecked')       || {},
+      todo_checked:       ga('todoChecked')       || {},
+      pack_dayof:         ga('packDayof')         || [],
+      todo_dayof:         ga('todoDayof')         || [],
+      pack_dayof_removed: ga('packDayofRemoved')  || [],
+      todo_dayof_removed: ga('todoDayofRemoved')  || [],
+      updated_at:         new Date().toISOString()
+    });
+  } catch(e) { console.error('Trip state sync error:', e); }
+}
+
+function queueMetaSync() {
+  if (!supabase || !currentUserId) return;
+  if (_metaSyncTimer) clearTimeout(_metaSyncTimer);
+  _metaSyncTimer = setTimeout(() => _flushMeta(), 1200);
+}
+async function _flushMeta() {
+  if (!supabase || !currentUserId) return;
+  try {
+    await supabase.from('user_meta').upsert({
+      user_id:             currentUserId,
+      last_trip:           JSON.parse(localStorage.getItem(sk('__meta__','lastTrip'))          || 'null'),
+      permanently_deleted: JSON.parse(localStorage.getItem(sk('__meta__','permanentlyDeleted'))|| '[]'),
+      change_log:          JSON.parse(localStorage.getItem('changeLog')                        || '[]'),
+      edit_log:            JSON.parse(localStorage.getItem('editLog')                          || '[]')
+    });
+  } catch(e) { console.error('Meta sync error:', e); }
+}
+
+async function syncMasterItemsToSupabase() {
+  if (!supabase || !currentUserId) return;
+  try {
+    await supabase.from('master_items').delete().eq('user_id', currentUserId);
+    if (MASTER_ITEMS.length) {
+      await supabase.from('master_items').insert(
+        MASTER_ITEMS.map(i => ({ user_id:currentUserId, id:i.id, name:i.name, cat_id:i.catId, tab:i.tab, subcat_label:i.subcatLabel||null }))
+      );
+    }
+  } catch(e) { console.error('Master items sync error:', e); }
+}
+
+async function syncMasterCatsToSupabase() {
+  if (!supabase || !currentUserId) return;
+  try {
+    await supabase.from('master_cats').delete().eq('user_id', currentUserId);
+    const cats = Object.values(MASTER_CATS);
+    if (cats.length) {
+      await supabase.from('master_cats').insert(
+        cats.map(c => ({ user_id:currentUserId, id:c.id, icon:c.icon, title:c.title, tab:c.tab }))
+      );
+    }
+  } catch(e) { console.error('Master cats sync error:', e); }
+}
+
+async function syncTripsToSupabase() {
+  if (!supabase || !currentUserId) return;
+  try {
+    const tripList = getTripList();
+    if (tripList.length) {
+      await supabase.from('trips').upsert(
+        tripList.map(id => ({ user_id:currentUserId, id, name: getTripName(id) }))
+      );
+    }
+  } catch(e) { console.error('Trips sync error:', e); }
+}
+
+// ═══════════════════════════════════
+// STARTUP (replaces bare init() call)
+// ═══════════════════════════════════
+async function startup() {
+  if (!SUPABASE_CONFIGURED) {
+    // No Supabase credentials — run in local-only mode
+    document.getElementById('auth-overlay').style.display = 'none';
+    init();
+    return;
+  }
+
+  supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // Listen for future auth state changes (e.g. email confirmation in another tab)
+  supabase.auth.onAuthStateChange(async (event, session) => {
+    if (event === 'SIGNED_IN' && !currentUserId) {
+      await onAuthSuccess(session.user);
+    } else if (event === 'SIGNED_OUT') {
+      location.reload();
+    }
+  });
+
+  // Check if already logged in
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session) {
+    await onAuthSuccess(session.user);
+  } else {
+    showAuthForm();
+  }
+}
+
+// ═══════════════════════════════════
+// INIT
+// ═══════════════════════════════════
+function init() {
+  // Load any persisted master items/cats
+  const savedItems = getMasterItems();
+  if (savedItems) MASTER_ITEMS = savedItems;
+  const savedCats = getMasterCats();
+  if (savedCats) savedCats.forEach(c=>{ if(!MASTER_CATS[c.id]) MASTER_CATS[c.id]=c; });
+
+  const trips = getTripList();
+  if (!trips.includes('salem')) { trips.unshift('salem'); saveTripList(trips); }
+  if (!trips.includes('birthday')) { trips.splice(1,0,'birthday'); saveTripList(trips); }
+  currentTrip = gs('__meta__','lastTrip','salem');
+  if (!trips.includes(currentTrip)) currentTrip = trips[0];
+  buildTripSelect();
+  renderAll();
+}
+startup();
+</script>
+</body>
+</html>
