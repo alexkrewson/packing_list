@@ -579,7 +579,7 @@ let pressTimer = null;
 let editState = {};
 
 // Supabase auth & sync state
-let supabase = null;
+let sb = null;           // Supabase client instance (window.supabase is the CDN namespace)
 let currentUserId = null;
 const _pendingTripSync = {};
 let _metaSyncTimer = null;
@@ -624,7 +624,7 @@ function ss(trip, key, val) {
   try {
     localStorage.setItem(sk(trip,key), JSON.stringify(val));
     logChange(trip, key, val);
-    if (supabase && currentUserId) {
+    if (sb && currentUserId) {
       if (trip === '__meta__') {
         if (key === 'trips') syncTripsToSupabase();
         else queueMetaSync();
@@ -1558,7 +1558,7 @@ async function authSignIn() {
   const btn = document.getElementById('auth-signin-btn');
   btn.textContent = 'Signing in…'; btn.disabled = true;
   _setAuthError('');
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
   btn.textContent = 'Sign in →'; btn.disabled = false;
   if (error) { _setAuthError(error.message); return; }
   await onAuthSuccess(data.user);
@@ -1572,7 +1572,7 @@ async function authSignUp() {
   const btn = document.getElementById('auth-signup-btn');
   btn.textContent = 'Creating…'; btn.disabled = true;
   _setAuthError('');
-  const { data, error } = await supabase.auth.signUp({ email, password });
+  const { data, error } = await sb.auth.signUp({ email, password });
   btn.textContent = 'Create account'; btn.disabled = false;
   if (error) { _setAuthError(error.message); return; }
   if (data.user && !data.session) {
@@ -1586,7 +1586,7 @@ async function authSignUp() {
 }
 
 async function authSignOut() {
-  if (supabase) await supabase.auth.signOut();
+  if (sb) await sb.auth.signOut();
   currentUserId = null;
   location.reload();
 }
@@ -1604,10 +1604,10 @@ async function onAuthSuccess(user) {
 // SUPABASE DATA LOAD
 // ═══════════════════════════════════
 async function loadUserData(userId) {
-  if (!supabase) return;
+  if (!sb) return;
   try {
     // Check if user already has trips in Supabase
-    const { data: existingTrips } = await supabase
+    const { data: existingTrips } = await sb
       .from('trips').select('id').eq('user_id', userId).limit(1);
 
     if (!existingTrips || existingTrips.length === 0) {
@@ -1617,7 +1617,7 @@ async function loadUserData(userId) {
     }
 
     // Load master items
-    const { data: items } = await supabase
+    const { data: items } = await sb
       .from('master_items').select('*').eq('user_id', userId);
     if (items && items.length) {
       localStorage.setItem('masterItems', JSON.stringify(
@@ -1627,7 +1627,7 @@ async function loadUserData(userId) {
     }
 
     // Load master categories
-    const { data: cats } = await supabase
+    const { data: cats } = await sb
       .from('master_cats').select('*').eq('user_id', userId);
     if (cats && cats.length) {
       localStorage.setItem('masterCats', JSON.stringify(
@@ -1636,7 +1636,7 @@ async function loadUserData(userId) {
     }
 
     // Load trips list + names
-    const { data: trips } = await supabase
+    const { data: trips } = await sb
       .from('trips').select('*').eq('user_id', userId);
     if (trips && trips.length) {
       localStorage.setItem(sk('__meta__','trips'), JSON.stringify(trips.map(t => t.id)));
@@ -1644,7 +1644,7 @@ async function loadUserData(userId) {
     }
 
     // Load trip states
-    const { data: states } = await supabase
+    const { data: states } = await sb
       .from('trip_state').select('*').eq('user_id', userId);
     if (states) {
       states.forEach(s => {
@@ -1661,7 +1661,7 @@ async function loadUserData(userId) {
     }
 
     // Load user meta (lastTrip, deleted items, logs)
-    const { data: meta } = await supabase
+    const { data: meta } = await sb
       .from('user_meta').select('*').eq('user_id', userId).maybeSingle();
     if (meta) {
       if (meta.last_trip)            localStorage.setItem(sk('__meta__','lastTrip'),          JSON.stringify(meta.last_trip));
@@ -1676,23 +1676,23 @@ async function loadUserData(userId) {
 
 // First-login migration: push current localStorage state to Supabase
 async function pushAllToSupabase(userId) {
-  if (!supabase || !userId) return;
+  if (!sb || !userId) return;
   try {
     const items = JSON.parse(localStorage.getItem('masterItems') || 'null');
     if (items && items.length) {
-      await supabase.from('master_items').upsert(
+      await sb.from('master_items').upsert(
         items.map(i => ({ user_id:userId, id:i.id, name:i.name, cat_id:i.catId, tab:i.tab, subcat_label:i.subcatLabel||null }))
       );
     }
     const cats = JSON.parse(localStorage.getItem('masterCats') || 'null');
     if (cats && cats.length) {
-      await supabase.from('master_cats').upsert(
+      await sb.from('master_cats').upsert(
         cats.map(c => ({ user_id:userId, id:c.id, icon:c.icon, title:c.title, tab:c.tab }))
       );
     }
     const tripList = JSON.parse(localStorage.getItem(sk('__meta__','trips')) || '["salem","birthday"]');
     if (tripList.length) {
-      await supabase.from('trips').upsert(
+      await sb.from('trips').upsert(
         tripList.map(id => ({ user_id:userId, id,
           name: JSON.parse(localStorage.getItem(sk(id,'name'))||'null') || TRIP_DEFAULTS[id]?.name || id }))
       );
@@ -1710,9 +1710,9 @@ async function pushAllToSupabase(userId) {
           todo_dayof_removed: ga('todoDayofRemoved')  || []
         };
       });
-      await supabase.from('trip_state').upsert(stateRows);
+      await sb.from('trip_state').upsert(stateRows);
     }
-    await supabase.from('user_meta').upsert({
+    await sb.from('user_meta').upsert({
       user_id:              userId,
       last_trip:            JSON.parse(localStorage.getItem(sk('__meta__','lastTrip'))          || 'null'),
       permanently_deleted:  JSON.parse(localStorage.getItem(sk('__meta__','permanentlyDeleted'))|| '[]'),
@@ -1728,15 +1728,15 @@ async function pushAllToSupabase(userId) {
 // SUPABASE WRITE HELPERS
 // ═══════════════════════════════════
 function queueTripSync(tripId) {
-  if (!supabase || !currentUserId) return;
+  if (!sb || !currentUserId) return;
   if (_pendingTripSync[tripId]) clearTimeout(_pendingTripSync[tripId]);
   _pendingTripSync[tripId] = setTimeout(() => _flushTripState(tripId), 600);
 }
 async function _flushTripState(tripId) {
-  if (!supabase || !currentUserId) return;
+  if (!sb || !currentUserId) return;
   const ga = k => { const v = localStorage.getItem(sk(tripId,k)); return v ? JSON.parse(v) : null; };
   try {
-    await supabase.from('trip_state').upsert({
+    await sb.from('trip_state').upsert({
       user_id:            currentUserId,
       trip_id:            tripId,
       pack_active:        ga('packActive'),
@@ -1753,14 +1753,14 @@ async function _flushTripState(tripId) {
 }
 
 function queueMetaSync() {
-  if (!supabase || !currentUserId) return;
+  if (!sb || !currentUserId) return;
   if (_metaSyncTimer) clearTimeout(_metaSyncTimer);
   _metaSyncTimer = setTimeout(() => _flushMeta(), 1200);
 }
 async function _flushMeta() {
-  if (!supabase || !currentUserId) return;
+  if (!sb || !currentUserId) return;
   try {
-    await supabase.from('user_meta').upsert({
+    await sb.from('user_meta').upsert({
       user_id:             currentUserId,
       last_trip:           JSON.parse(localStorage.getItem(sk('__meta__','lastTrip'))          || 'null'),
       permanently_deleted: JSON.parse(localStorage.getItem(sk('__meta__','permanentlyDeleted'))|| '[]'),
@@ -1771,11 +1771,11 @@ async function _flushMeta() {
 }
 
 async function syncMasterItemsToSupabase() {
-  if (!supabase || !currentUserId) return;
+  if (!sb || !currentUserId) return;
   try {
-    await supabase.from('master_items').delete().eq('user_id', currentUserId);
+    await sb.from('master_items').delete().eq('user_id', currentUserId);
     if (MASTER_ITEMS.length) {
-      await supabase.from('master_items').insert(
+      await sb.from('master_items').insert(
         MASTER_ITEMS.map(i => ({ user_id:currentUserId, id:i.id, name:i.name, cat_id:i.catId, tab:i.tab, subcat_label:i.subcatLabel||null }))
       );
     }
@@ -1783,12 +1783,12 @@ async function syncMasterItemsToSupabase() {
 }
 
 async function syncMasterCatsToSupabase() {
-  if (!supabase || !currentUserId) return;
+  if (!sb || !currentUserId) return;
   try {
-    await supabase.from('master_cats').delete().eq('user_id', currentUserId);
+    await sb.from('master_cats').delete().eq('user_id', currentUserId);
     const cats = Object.values(MASTER_CATS);
     if (cats.length) {
-      await supabase.from('master_cats').insert(
+      await sb.from('master_cats').insert(
         cats.map(c => ({ user_id:currentUserId, id:c.id, icon:c.icon, title:c.title, tab:c.tab }))
       );
     }
@@ -1796,11 +1796,11 @@ async function syncMasterCatsToSupabase() {
 }
 
 async function syncTripsToSupabase() {
-  if (!supabase || !currentUserId) return;
+  if (!sb || !currentUserId) return;
   try {
     const tripList = getTripList();
     if (tripList.length) {
-      await supabase.from('trips').upsert(
+      await sb.from('trips').upsert(
         tripList.map(id => ({ user_id:currentUserId, id, name: getTripName(id) }))
       );
     }
@@ -1818,10 +1818,10 @@ async function startup() {
     return;
   }
 
-  supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   // Listen for future auth state changes (e.g. email confirmation in another tab)
-  supabase.auth.onAuthStateChange(async (event, session) => {
+  sb.auth.onAuthStateChange(async (event, session) => {
     if (event === 'SIGNED_IN' && !currentUserId) {
       await onAuthSuccess(session.user);
     } else if (event === 'SIGNED_OUT') {
@@ -1830,7 +1830,7 @@ async function startup() {
   });
 
   // Check if already logged in
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { session } } = await sb.auth.getSession();
   if (session) {
     await onAuthSuccess(session.user);
   } else {
