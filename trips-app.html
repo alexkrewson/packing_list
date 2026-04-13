@@ -1592,10 +1592,11 @@ async function authSignOut() {
 }
 
 async function onAuthSuccess(user) {
+  if (currentUserId) return; // Guard against double-init
   currentUserId = user.id;
   document.getElementById('auth-loading').style.display = '';
   document.getElementById('auth-form').style.display = 'none';
-  await loadUserData(user.id);
+  try { await loadUserData(user.id); } catch(e) { console.error('loadUserData:', e); }
   hideAuthOverlay();
   init();
 }
