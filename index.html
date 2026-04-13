@@ -1592,17 +1592,20 @@ async function authSignOut() {
 }
 
 async function onAuthSuccess(user) {
+  console.log('[auth] onAuthSuccess called, currentUserId=', currentUserId);
   if (currentUserId) return; // Guard against double-init
   currentUserId = user.id;
   document.getElementById('auth-loading').textContent = 'Loading your data…';
   document.getElementById('auth-loading').style.display = '';
   document.getElementById('auth-form').style.display = 'none';
-  try { await loadUserData(user.id); } catch(e) { console.error('loadUserData:', e); }
+  console.log('[auth] loading user data...');
+  try { await loadUserData(user.id); } catch(e) { console.error('[auth] loadUserData threw:', e); }
+  console.log('[auth] hiding overlay, calling init()');
   hideAuthOverlay();
   try { init(); } catch(e) {
-    console.error('init() failed:', e);
+    console.error('[auth] init() threw:', e);
     document.getElementById('auth-overlay').style.display = 'flex';
-    document.getElementById('auth-loading').textContent = 'Error loading app: ' + e.message;
+    document.getElementById('auth-loading').textContent = 'Error: ' + e.message;
   }
 }
 
@@ -1612,9 +1615,11 @@ async function onAuthSuccess(user) {
 async function loadUserData(userId) {
   if (!sb) return;
   try {
+    console.log('[load] checking for existing trips...');
     // Check if user already has trips in Supabase
-    const { data: existingTrips } = await sb
+    const { data: existingTrips, error: tripErr } = await sb
       .from('trips').select('id').eq('user_id', userId).limit(1);
+    console.log('[load] existingTrips:', existingTrips, tripErr || '');
 
     if (!existingTrips || existingTrips.length === 0) {
       // First login — migrate existing localStorage data up to Supabase
@@ -1838,14 +1843,16 @@ async function startup() {
 
   // Primary session check — reliable across all Supabase v2 versions
   try {
-    const { data: { session } } = await sb.auth.getSession();
+    console.log('[auth] calling getSession...');
+    const { data: { session }, error } = await sb.auth.getSession();
+    console.log('[auth] getSession result:', session ? 'has session' : 'no session', error || '');
     if (session) {
       await onAuthSuccess(session.user);
     } else {
       showAuthForm();
     }
   } catch(e) {
-    console.error('getSession failed:', e);
+    console.error('[auth] getSession threw:', e);
     showAuthForm();
   }
 }
