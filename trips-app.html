@@ -1599,7 +1599,13 @@ async function onAuthSuccess(user) {
   document.getElementById('auth-loading').style.display = '';
   document.getElementById('auth-form').style.display = 'none';
   console.log('[auth] loading user data...');
-  try { await loadUserData(user.id); } catch(e) { console.error('[auth] loadUserData threw:', e); }
+  try {
+    // 8s timeout — if Supabase is paused/slow, fall back to localStorage
+    await Promise.race([
+      loadUserData(user.id),
+      new Promise(r => setTimeout(r, 8000))
+    ]);
+  } catch(e) { console.error('[auth] loadUserData threw:', e); }
   console.log('[auth] hiding overlay, calling init()');
   hideAuthOverlay();
   try { init(); } catch(e) {
