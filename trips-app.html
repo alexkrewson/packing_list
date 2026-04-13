@@ -1820,22 +1820,27 @@ async function startup() {
 
   sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  // Listen for future auth state changes (e.g. email confirmation in another tab)
+  // Fallback: if INITIAL_SESSION never fires (network issue), show form after 8s
+  const fallbackTimer = setTimeout(() => showAuthForm(), 8000);
+
+  // Supabase v2 fires INITIAL_SESSION immediately on registration with the current
+  // session (or null) — use that as the single source of truth to avoid the race
+  // condition between onAuthStateChange and getSession() calling onAuthSuccess twice.
   sb.auth.onAuthStateChange(async (event, session) => {
-    if (event === 'SIGNED_IN' && !currentUserId) {
+    if (event === 'INITIAL_SESSION') {
+      clearTimeout(fallbackTimer);
+      if (session) {
+        await onAuthSuccess(session.user);
+      } else {
+        showAuthForm();
+      }
+    } else if (event === 'SIGNED_IN' && !currentUserId) {
+      // New sign-in (e.g. email confirmation completed in another tab)
       await onAuthSuccess(session.user);
     } else if (event === 'SIGNED_OUT') {
       location.reload();
     }
   });
-
-  // Check if already logged in
-  const { data: { session } } = await sb.auth.getSession();
-  if (session) {
-    await onAuthSuccess(session.user);
-  } else {
-    showAuthForm();
-  }
 }
 
 // ═══════════════════════════════════
