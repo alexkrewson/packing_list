@@ -1594,11 +1594,16 @@ async function authSignOut() {
 async function onAuthSuccess(user) {
   if (currentUserId) return; // Guard against double-init
   currentUserId = user.id;
+  document.getElementById('auth-loading').textContent = 'Loading your data…';
   document.getElementById('auth-loading').style.display = '';
   document.getElementById('auth-form').style.display = 'none';
   try { await loadUserData(user.id); } catch(e) { console.error('loadUserData:', e); }
   hideAuthOverlay();
-  init();
+  try { init(); } catch(e) {
+    console.error('init() failed:', e);
+    document.getElementById('auth-overlay').style.display = 'flex';
+    document.getElementById('auth-loading').textContent = 'Error loading app: ' + e.message;
+  }
 }
 
 // ═══════════════════════════════════
@@ -1821,27 +1826,28 @@ async function startup() {
 
   sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  // Fallback: if INITIAL_SESSION never fires (network issue), show form after 8s
-  const fallbackTimer = setTimeout(() => showAuthForm(), 8000);
-
-  // Supabase v2 fires INITIAL_SESSION immediately on registration with the current
-  // session (or null) — use that as the single source of truth to avoid the race
-  // condition between onAuthStateChange and getSession() calling onAuthSuccess twice.
+  // Watch for future state changes (sign-out, token refresh, etc.)
+  // onAuthSuccess has a guard so it's safe even if this and getSession() both fire.
   sb.auth.onAuthStateChange(async (event, session) => {
-    if (event === 'INITIAL_SESSION') {
-      clearTimeout(fallbackTimer);
-      if (session) {
-        await onAuthSuccess(session.user);
-      } else {
-        showAuthForm();
-      }
-    } else if (event === 'SIGNED_IN' && !currentUserId) {
-      // New sign-in (e.g. email confirmation completed in another tab)
+    if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session) {
       await onAuthSuccess(session.user);
     } else if (event === 'SIGNED_OUT') {
       location.reload();
     }
   });
+
+  // Primary session check — reliable across all Supabase v2 versions
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    if (session) {
+      await onAuthSuccess(session.user);
+    } else {
+      showAuthForm();
+    }
+  } catch(e) {
+    console.error('getSession failed:', e);
+    showAuthForm();
+  }
 }
 
 // ═══════════════════════════════════
