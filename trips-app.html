@@ -87,8 +87,16 @@ li.pending.checked .item-text{color:var(--muted);}
 .custom-badge{font-size:0.6rem;font-weight:600;letter-spacing:0.05em;background:rgba(193,68,14,0.12);color:var(--accent);border-radius:3px;padding:0.1rem 0.3rem;flex-shrink:0;text-transform:uppercase;}
 
 /* Add row */
-.add-row{display:none;align-items:center;gap:0.5rem;padding:0.3rem 0.2rem;border-bottom:1px dotted var(--line);}
+.add-row{display:none;align-items:center;gap:0.5rem;padding:0.3rem 0.2rem;border-bottom:1px dotted var(--line);position:relative;}
 .add-row.visible{display:flex;}
+.add-suggestions{position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid var(--line);border-top:none;border-radius:0 0 5px 5px;box-shadow:0 4px 14px rgba(0,0,0,0.1);z-index:300;max-height:200px;overflow-y:auto;display:none;}
+.add-suggestions.visible{display:block;}
+.add-sugg-item{padding:0.38rem 0.65rem;font-size:0.82rem;cursor:pointer;display:flex;align-items:center;gap:0.5rem;border-bottom:1px dotted var(--line);transition:background 0.1s;}
+.add-sugg-item:last-child{border-bottom:none;}
+.add-sugg-item:hover,.add-sugg-item.focused{background:rgba(193,68,14,0.05);}
+.add-sugg-item.is-active{opacity:0.4;cursor:default;}
+.add-sugg-name{font-weight:300;color:var(--ink);flex:1;}
+.add-sugg-cat{font-size:0.6rem;color:var(--muted);background:rgba(0,0,0,0.05);border-radius:3px;padding:0.06rem 0.3rem;flex-shrink:0;}
 .add-input{flex:1;font-family:'DM Sans',sans-serif;font-size:0.88rem;font-weight:300;background:none;border:none;border-bottom:1px solid var(--accent);outline:none;color:var(--ink);padding:0.1rem 0;}
 .add-confirm{font-size:0.75rem;background:none;border:none;cursor:pointer;color:var(--green);font-weight:500;padding:0.1rem 0.3rem;}
 .add-cancel{font-size:0.75rem;background:none;border:none;cursor:pointer;color:var(--muted);padding:0.1rem 0.3rem;}
@@ -898,10 +906,18 @@ function renderTab(tab) {
     // Add row
     const addRow = document.createElement('div');
     addRow.className = 'add-row'; addRow.id = `addrow-${tab}-${catId}`;
-    addRow.innerHTML = `<input class="add-input" id="addinput-${tab}-${catId}" placeholder="New item…"><button class="add-confirm">Add</button><button class="add-cancel">✕</button>`;
+    addRow.innerHTML = `<input class="add-input" id="addinput-${tab}-${catId}" placeholder="New item…" autocomplete="off"><button class="add-confirm">Add</button><button class="add-cancel">✕</button><div class="add-suggestions" id="addsugg-${tab}-${catId}"></div>`;
     addRow.querySelector('.add-confirm').onclick = () => confirmAdd(tab, catId);
-    addRow.querySelector('.add-cancel').onclick = () => hideAddRow(tab, catId);
-    addRow.querySelector('.add-input').onkeydown = e => { if(e.key==='Enter')confirmAdd(tab,catId); if(e.key==='Escape')hideAddRow(tab,catId); };
+    addRow.querySelector('.add-cancel').onclick  = () => hideAddRow(tab, catId);
+    const addInp = addRow.querySelector('.add-input');
+    addInp.oninput  = () => _updateAddSuggestions(addInp, tab, catId);
+    addInp.onblur   = () => { setTimeout(() => { const s = document.getElementById(`addsugg-${tab}-${catId}`); if(s) s.classList.remove('visible'); }, 150); };
+    addInp.onkeydown = e => {
+      if (e.key==='ArrowDown') { e.preventDefault(); _moveAddSugg(tab, catId, 1); return; }
+      if (e.key==='ArrowUp')   { e.preventDefault(); _moveAddSugg(tab, catId, -1); return; }
+      if (e.key==='Enter')     { if (!_selectAddSugg(tab, catId)) confirmAdd(tab, catId); return; }
+      if (e.key==='Escape')    { hideAddRow(tab, catId); }
+    };
 
     section.appendChild(ul);
     section.appendChild(addRow);
@@ -1752,12 +1768,16 @@ function showAddRow(tab, catId) {
 function hideAddRow(tab, catId) {
   const row = document.getElementById(`addrow-${tab}-${catId}`);
   if (row) row.classList.remove('visible');
+  const sugg = document.getElementById(`addsugg-${tab}-${catId}`);
+  if (sugg) sugg.classList.remove('visible');
 }
 function confirmAdd(tab, catId) {
   const inp = document.getElementById(`addinput-${tab}-${catId}`);
   if (!inp) return;
   const name = inp.value.trim();
   if (!name) { hideAddRow(tab, catId); return; }
+  const existing = MASTER_ITEMS.find(i => i.name.toLowerCase() === name.toLowerCase() && i.tab === tab);
+  if (existing) { addItemToTrip(existing.id, tab); hideAddRow(tab, catId); return; }
   const prefix = tab === 'todo' ? 't_' : 'i_';
   const id = prefix + Date.now() + '_' + Math.random().toString(36).slice(2,6);
   MASTER_ITEMS.push({ id, name, catId, tab });
@@ -2128,6 +2148,84 @@ function init() {
   buildTripSelect();
   renderAll();
 }
+// ═══════════════════════════════════
+// ADD-ROW SUGGESTIONS
+// ═══════════════════════════════════
+function _normStem(s) {
+  return s.toLowerCase().replace(/ies$/, 'y').replace(/s$/, '');
+}
+
+function getSuggestions(query, tab) {
+  if (!query || query.length < 2) return [];
+  const q = query.toLowerCase();
+  const qs = _normStem(query);
+  const activeIds = new Set(getActiveIds(currentTrip, tab));
+  return MASTER_ITEMS
+    .filter(i => i.tab === tab)
+    .map(i => {
+      const n = i.name.toLowerCase(), ns = _normStem(i.name);
+      let score = 0;
+      if (n === q || ns === qs)                             score = 100;
+      else if (n.startsWith(q))                             score = 90;
+      else if (ns.startsWith(qs))                           score = 85;
+      else if (n.includes(q))                               score = 70;
+      else if (ns.includes(qs))                             score = 65;
+      else if (qs.length >= 3 && ns.startsWith(qs.slice(0,-1))) score = 45;
+      if (score > 0 && activeIds.has(i.id)) score -= 30;
+      return { item: i, score };
+    })
+    .filter(r => r.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 7)
+    .map(r => r.item);
+}
+
+function _updateAddSuggestions(inp, tab, catId) {
+  const sugg = document.getElementById(`addsugg-${tab}-${catId}`);
+  if (!sugg) return;
+  const matches = getSuggestions(inp.value, tab);
+  if (!matches.length) { sugg.classList.remove('visible'); return; }
+  const activeIds = new Set(getActiveIds(currentTrip, tab));
+  sugg.innerHTML = matches.map(item => {
+    const cat = getCat(item.catId);
+    const active = activeIds.has(item.id);
+    return `<div class="add-sugg-item${active?' is-active':''}" data-id="${item.id}" data-active="${active}">
+      <span class="add-sugg-name">${item.name}</span>
+      <span class="add-sugg-cat">${cat?.icon||''} ${cat?.title||item.catId}</span>
+    </div>`;
+  }).join('');
+  sugg.querySelectorAll('.add-sugg-item:not(.is-active)').forEach(el => {
+    el.onmousedown = e => {
+      e.preventDefault();
+      addItemToTrip(el.dataset.id, tab);
+      hideAddRow(tab, catId);
+    };
+  });
+  sugg.classList.add('visible');
+}
+
+function _moveAddSugg(tab, catId, dir) {
+  const sugg = document.getElementById(`addsugg-${tab}-${catId}`);
+  if (!sugg || !sugg.classList.contains('visible')) return;
+  const items = [...sugg.querySelectorAll('.add-sugg-item:not(.is-active)')];
+  if (!items.length) return;
+  const cur = sugg.querySelector('.add-sugg-item.focused');
+  const idx = cur ? items.indexOf(cur) : -1;
+  items.forEach(el => el.classList.remove('focused'));
+  const next = idx + dir;
+  if (next >= 0 && next < items.length) items[next].classList.add('focused');
+}
+
+function _selectAddSugg(tab, catId) {
+  const sugg = document.getElementById(`addsugg-${tab}-${catId}`);
+  if (!sugg) return false;
+  const focused = sugg.querySelector('.add-sugg-item.focused');
+  if (!focused) return false;
+  addItemToTrip(focused.dataset.id, tab);
+  hideAddRow(tab, catId);
+  return true;
+}
+
 // ═══════════════════════════════════
 // PENDING (waiting on a task)
 // ═══════════════════════════════════
