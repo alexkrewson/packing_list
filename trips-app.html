@@ -11,6 +11,7 @@
   --ink:#1a1a2e; --paper:#f5f0e8; --accent:#c1440e;
   --muted:#8a7f72; --line:#d6cfc4; --green:#3d6b4f;
   --amber:#a06000; --amber-bg:rgba(194,120,3,0.07);
+  --pending:#1971c2; --pending-bg:rgba(25,113,194,0.07);
   --pool-bg:#ede8e0; --pool-border:#c8c0b4;
 }
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -70,6 +71,19 @@ li.dayof .item-text{color:var(--amber);}
 li.dayof .cb{border-color:#c27803;}
 li.dayof::before{content:'☀️';font-size:0.68rem;flex-shrink:0;}
 li.dayof.checked .item-text{color:var(--muted);}
+li.pending{background:var(--pending-bg);}
+li.pending .item-text{color:var(--pending);}
+li.pending .cb{border-color:var(--pending);}
+li.pending.checked .item-text{color:var(--muted);}
+.pending-badge{font-size:0.6rem;font-weight:500;color:var(--pending);background:rgba(25,113,194,0.12);border-radius:3px;padding:0.08rem 0.35rem;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:130px;}
+
+/* Pending modal */
+.pending-radio-list{max-height:200px;overflow-y:auto;margin:0.5rem 0 0.8rem;border:1px solid var(--line);border-radius:4px;}
+.pending-radio-item{display:flex;align-items:center;gap:0.6rem;padding:0.42rem 0.7rem;border-bottom:1px dotted var(--line);cursor:pointer;font-size:0.84rem;font-weight:300;transition:background 0.1s;}
+.pending-radio-item:last-child{border-bottom:none;}
+.pending-radio-item:hover{background:rgba(0,0,0,0.025);}
+.pending-radio-item input[type=radio]{accent-color:var(--pending);width:13px;height:13px;flex-shrink:0;cursor:pointer;}
+.pending-empty{font-size:0.82rem;color:var(--muted);font-style:italic;padding:0.75rem 0.7rem;}
 .custom-badge{font-size:0.6rem;font-weight:600;letter-spacing:0.05em;background:rgba(193,68,14,0.12);color:var(--accent);border-radius:3px;padding:0.1rem 0.3rem;flex-shrink:0;text-transform:uppercase;}
 
 /* Add row */
@@ -491,6 +505,29 @@ li.dayof.checked .item-text{color:var(--muted);}
   </div>
 </div>
 
+<!-- Pending task modal -->
+<div class="overlay" id="pending-modal">
+  <div class="suggest-modal-box">
+    <h2 id="pending-modal-title">Waiting on…</h2>
+    <p class="suggest-subtitle">Select an existing to-do task or create a new one. The item will be highlighted until you remove the pending flag.</p>
+    <div class="pending-radio-list" id="pending-radio-list"></div>
+    <div class="suggest-divider">Or create a new task</div>
+    <div class="suggest-custom-row">
+      <input id="pending-new-task" type="text" placeholder="Task name…"
+             onkeydown="if(event.key==='Enter')submitPendingModal()">
+    </div>
+    <div class="suggest-cat-row">
+      <label>Category</label>
+      <select id="pending-cat-select" onchange="onPendingCatChange()"></select>
+      <input id="pending-newcat-input" class="suggest-newcat-input" type="text" placeholder="New category name…">
+    </div>
+    <div class="modal-btns"><div class="right">
+      <button class="btn" onclick="closeAllModals()">Cancel</button>
+      <button class="btn primary" onclick="submitPendingModal()">Link →</button>
+    </div></div>
+  </div>
+</div>
+
 <!-- Patch button -->
 <button class="patch-btn" onclick="openPatchModal()">{ }</button>
 
@@ -816,6 +853,7 @@ function renderTab(tab) {
   const customDayof = new Set(gs(currentTrip, tab+'Dayof', []));
   const builtinDayof = new Set(TRIP_DEFAULTS[currentTrip]?.defaultDayof || []);
   const dayof = new Set([...builtinDayof, ...customDayof]);
+  const pending = tab === 'pack' ? getPending(currentTrip) : {};
 
   // Active items grouped by cat
   const gridEl = document.getElementById(tab===('pack')?'pack-grid':'todo-grid');
@@ -853,7 +891,7 @@ function renderTab(tab) {
         ul.appendChild(lbl);
       }
       catItems.filter(i=>(i.subcatLabel||'')=== sub).forEach(item => {
-        ul.appendChild(buildActiveLi(item, tab, checked, dayof));
+        ul.appendChild(buildActiveLi(item, tab, checked, dayof, pending));
       });
     });
 
@@ -874,13 +912,21 @@ function renderTab(tab) {
   renderPool(tab);
 }
 
-function buildActiveLi(item, tab, checked, dayof) {
+function buildActiveLi(item, tab, checked, dayof, pending) {
   const li = document.createElement('li');
   const isChecked = !!checked[item.id];
   const isDayof = dayof.has(item.id);
+  const pendingTodoId = pending?.[item.id];
   if (isChecked) li.classList.add('checked');
   if (isDayof) li.classList.add('dayof');
-  li.innerHTML = `<span class="cb"></span><span class="item-text">${item.name}</span>`;
+  if (pendingTodoId) li.classList.add('pending');
+  let pendingBadge = '';
+  if (pendingTodoId) {
+    const todoItem = getItem(pendingTodoId);
+    const taskName = todoItem ? todoItem.name : '?';
+    pendingBadge = `<span class="pending-badge" title="Waiting on: ${taskName}">⏳ ${taskName}</span>`;
+  }
+  li.innerHTML = `<span class="cb"></span><span class="item-text">${item.name}</span>${pendingBadge}`;
   li.onclick = e => { if (!e.target.classList.contains('del-btn')) toggleItem(item.id, tab); };
   if (tab === 'pack') attachItemCtx(li, item, tab);
   else attachTodoCtx(li, item);
@@ -1013,10 +1059,12 @@ function attachItemCtx(li, item, tab) {
     const isDayof = dayof.has(item.id);
     const checked = gs(currentTrip, tab+'Checked', {});
     const isChecked = !!checked[item.id];
+    const isPending = !!getPending(currentTrip)[item.id];
     const menu = document.createElement('div');
     menu.className = 'ctx-menu';
     menu.innerHTML = `
       <div class="ctx-item" id="cm-dayof">${isDayof?'✕ Remove <u>d</u>ay-of flag':'☀️ Pack <u>d</u>ay-of'}</div>
+      <div class="ctx-item" id="cm-pending">${isPending?'✕ Remove <u>p</u>ending':'⏳ Set <u>p</u>ending'}</div>
       <div class="ctx-divider"></div>
       <div class="ctx-item" id="cm-toggle">${isChecked?'☐ Un<u>c</u>heck':'☑ <u>C</u>heck'}</div>
       <div class="ctx-divider"></div>
@@ -1044,18 +1092,22 @@ function attachItemCtx(li, item, tab) {
       li.classList.toggle('dayof', s.has(item.id) || (builtinDayofSet.has(item.id) && !gs(currentTrip, tab+'DayofRemoved', []).includes(item.id)));
       closeCtxMenu();
     };
-    const toggleFn = () => { toggleItem(item.id, tab); closeCtxMenu(); };
-    const editFn   = () => { closeCtxMenu(); openEditModal(item, tab, item.catId); };
-    const removeFn = () => { removeItemFromTrip(item.id, tab); closeCtxMenu(); };
-    const todoFn   = () => { closeCtxMenu(); openSuggestModal(item); };
-    menu.querySelector('#cm-dayof').onclick = dayofFn;
-    menu.querySelector('#cm-toggle').onclick = toggleFn;
-    menu.querySelector('#cm-edit').onclick   = editFn;
-    menu.querySelector('#cm-remove').onclick = removeFn;
+    const toggleFn  = () => { toggleItem(item.id, tab); closeCtxMenu(); };
+    const editFn    = () => { closeCtxMenu(); openEditModal(item, tab, item.catId); };
+    const removeFn  = () => { removeItemFromTrip(item.id, tab); closeCtxMenu(); };
+    const todoFn    = () => { closeCtxMenu(); openSuggestModal(item); };
+    const pendingFn = isPending
+      ? () => { clearPendingForItem(item.id); }
+      : () => { closeCtxMenu(); openPendingModal(item); };
+    menu.querySelector('#cm-dayof').onclick   = dayofFn;
+    menu.querySelector('#cm-pending').onclick = pendingFn;
+    menu.querySelector('#cm-toggle').onclick  = toggleFn;
+    menu.querySelector('#cm-edit').onclick    = editFn;
+    menu.querySelector('#cm-remove').onclick  = removeFn;
     if (tab === 'pack') menu.querySelector('#cm-todo').onclick = todoFn;
     positionMenu(menu, e);
     document.body.appendChild(menu); ctxMenu = menu;
-    _setCtxKeys({ d: dayofFn, c: toggleFn, e: editFn, r: removeFn, ...(tab==='pack'?{t:todoFn}:{}) });
+    _setCtxKeys({ d: dayofFn, p: pendingFn, c: toggleFn, e: editFn, r: removeFn, ...(tab==='pack'?{t:todoFn}:{}) });
   };
   li.addEventListener('contextmenu', handler);
   li.addEventListener('touchstart', e=>{ pressTimer=setTimeout(()=>handler(e),500); },{passive:true});
@@ -2075,6 +2127,88 @@ function init() {
   buildTripSelect();
   renderAll();
 }
+// ═══════════════════════════════════
+// PENDING (waiting on a task)
+// ═══════════════════════════════════
+let pendingState = { item: null };
+
+function getPending(trip) { return gs(trip, 'packPending', {}); }
+function savePending(trip, pending) { ss(trip, 'packPending', pending); }
+
+function clearPendingForItem(itemId) {
+  closeCtxMenu();
+  const pending = getPending(currentTrip);
+  delete pending[itemId];
+  savePending(currentTrip, pending);
+  renderAll();
+}
+
+function openPendingModal(item) {
+  pendingState = { item };
+  document.getElementById('pending-modal-title').textContent = `"${item.name}" is waiting on…`;
+
+  populateTodoCatSelect('pending-cat-select', 'pending-newcat-input', 'prep_general');
+  document.getElementById('pending-new-task').value = '';
+
+  const todoIds = getActiveIds(currentTrip, 'todo');
+  const currentPending = getPending(currentTrip);
+  const linkedTodoId = currentPending[item.id];
+  const list = document.getElementById('pending-radio-list');
+
+  if (!todoIds.length) {
+    list.innerHTML = '<div class="pending-empty">No to-do tasks yet — create one below.</div>';
+  } else {
+    list.innerHTML = todoIds.map(id => {
+      const todo = getItem(id);
+      if (!todo) return '';
+      const sel = id === linkedTodoId ? 'checked' : '';
+      return `<label class="pending-radio-item"><input type="radio" name="pending-todo" value="${id}" ${sel}><span>${todo.name}</span></label>`;
+    }).filter(Boolean).join('');
+  }
+
+  document.getElementById('pending-modal').classList.add('visible');
+  setTimeout(() => document.getElementById('pending-new-task').focus(), 50);
+}
+
+function onPendingCatChange() {
+  const sel = document.getElementById('pending-cat-select');
+  document.getElementById('pending-newcat-input').style.display = sel.value === '__new__' ? 'block' : 'none';
+}
+
+function submitPendingModal() {
+  const item = pendingState.item;
+  if (!item) return;
+
+  const newTaskName = document.getElementById('pending-new-task').value.trim();
+  const selectedRadio = document.querySelector('input[name="pending-todo"]:checked');
+  let todoId = null;
+
+  if (newTaskName) {
+    let catId = document.getElementById('pending-cat-select').value;
+    if (catId === '__new__') {
+      const newCatName = document.getElementById('pending-newcat-input').value.trim();
+      if (!newCatName) return;
+      catId = 'cat_' + Date.now();
+      MASTER_CATS[catId] = { id: catId, icon: '📋', title: newCatName, tab: 'todo' };
+      saveMasterCats();
+    }
+    addTodoItem(newTaskName, catId);
+    const newTodo = MASTER_ITEMS.find(i => i.name.toLowerCase() === newTaskName.toLowerCase() && i.tab === 'todo');
+    if (newTodo) todoId = newTodo.id;
+  } else if (selectedRadio) {
+    todoId = selectedRadio.value;
+  }
+
+  if (todoId) {
+    const pending = getPending(currentTrip);
+    pending[item.id] = todoId;
+    savePending(currentTrip, pending);
+  }
+
+  closeAllModals();
+  renderAll();
+}
+
 // ═══════════════════════════════════
 // PROFILE MENU
 // ═══════════════════════════════════
