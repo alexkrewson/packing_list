@@ -183,6 +183,16 @@ li.dayof.checked .item-text{color:var(--muted);}
 .suggest-cat-row select:focus{border-color:var(--accent);}
 .suggest-newcat-input{width:100%;font-family:'DM Sans',sans-serif;font-size:0.85rem;background:none;border:none;border-bottom:1px solid var(--accent);outline:none;color:var(--ink);padding:0.2rem 0;margin-top:0.5rem;display:none;}
 
+/* Patch button & modal */
+.patch-btn{position:fixed;bottom:1.2rem;left:1.2rem;z-index:500;font-family:'DM Sans',sans-serif;font-size:0.75rem;background:var(--paper);color:var(--muted);border:1.5px solid var(--line);border-radius:4px;padding:0.3rem 0.65rem;cursor:pointer;letter-spacing:0.05em;transition:border-color 0.15s,color 0.15s;box-shadow:0 2px 8px rgba(0,0,0,0.08);}
+.patch-btn:hover{border-color:var(--accent);color:var(--accent);}
+.patch-modal-box{background:var(--paper);border-radius:8px;padding:1.5rem;width:100%;max-width:520px;box-shadow:0 8px 32px rgba(0,0,0,0.2);}
+.patch-modal-box h2{font-family:'Playfair Display',serif;font-size:1.15rem;margin-bottom:1rem;border-bottom:1.5px solid var(--ink);padding-bottom:0.7rem;}
+.patch-textarea{width:100%;min-height:160px;font-family:monospace;font-size:0.73rem;background:rgba(0,0,0,0.03);border:1px solid var(--line);border-radius:4px;padding:0.7rem;color:var(--ink);resize:vertical;outline:none;transition:border-color 0.15s;}
+.patch-textarea:focus{border-color:var(--accent);}
+.patch-preview{margin-top:0.6rem;font-size:0.78rem;color:var(--muted);min-height:1.4em;}
+.patch-error{font-size:0.78rem;color:var(--accent);min-height:1.2em;}
+
 /* Auth overlay */
 .auth-overlay{position:fixed;inset:0;background:var(--paper);z-index:9000;display:flex;align-items:center;justify-content:center;padding:1.5rem;}
 .auth-box{width:100%;max-width:340px;}
@@ -192,8 +202,27 @@ li.dayof.checked .item-text{color:var(--muted);}
 .auth-toggle{font-size:0.78rem;color:var(--muted);margin-top:1rem;text-align:center;}
 .auth-toggle button{background:none;border:none;color:var(--accent);cursor:pointer;font-size:0.78rem;text-decoration:underline;padding:0;}
 .auth-loading{text-align:center;padding:2rem;font-size:0.85rem;color:var(--muted);}
-.signout-btn{font-family:'DM Sans',sans-serif;font-size:0.7rem;color:var(--muted);background:none;border:1.5px solid var(--line);padding:0.22rem 0.65rem;border-radius:3px;cursor:pointer;letter-spacing:0.07em;text-transform:uppercase;white-space:nowrap;transition:border-color 0.15s,color 0.15s;}
-.signout-btn:hover{border-color:var(--accent);color:var(--accent);}
+/* Profile menu */
+.profile-wrap{position:relative;display:none;flex-shrink:0;}
+.profile-wrap.visible{display:block;}
+.profile-btn{background:none;border:1.5px solid var(--line);border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;transition:border-color 0.15s;}
+.profile-btn:hover{border-color:var(--accent);}
+.profile-btn svg{width:15px;height:15px;fill:var(--muted);transition:fill 0.15s;}
+.profile-btn:hover svg{fill:var(--accent);}
+.profile-dropdown{position:absolute;right:0;top:calc(100% + 6px);background:#fff;border:1px solid var(--line);border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,0.13);z-index:1000;overflow:hidden;min-width:170px;animation:ctxFade 0.1s ease;display:none;}
+.profile-dropdown.open{display:block;}
+.profile-dd-item{padding:0.55rem 1rem;font-size:0.82rem;cursor:pointer;color:var(--ink);display:flex;align-items:center;gap:0.5rem;transition:background 0.1s;}
+.profile-dd-item:hover{background:var(--paper);}
+.profile-dd-item.danger{color:var(--accent);}
+.profile-dd-divider{height:1px;background:var(--line);}
+
+/* Password reset overlay */
+.pwreset-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9500;display:none;align-items:center;justify-content:center;padding:1.5rem;}
+.pwreset-overlay.visible{display:flex;}
+.pwreset-box{background:var(--paper);border-radius:8px;padding:1.5rem;width:100%;max-width:360px;box-shadow:0 8px 32px rgba(0,0,0,0.2);}
+.pwreset-box h2{font-family:'Playfair Display',serif;font-size:1.2rem;margin-bottom:0.4rem;}
+.pwreset-box p{font-size:0.8rem;color:var(--muted);margin-bottom:1.2rem;line-height:1.5;}
+.pwreset-error{font-size:0.78rem;color:var(--accent);margin-top:0.4rem;min-height:1.1em;}
 </style>
 </head>
 <body>
@@ -234,7 +263,16 @@ li.dayof.checked .item-text{color:var(--muted);}
     <select class="trip-select" id="trip-select" onchange="switchTrip(this.value)"></select>
     <button class="top-btn green" onclick="openEditsModal()">Edits</button>
     <button class="top-btn ml-auto" onclick="openNewTripModal()">+ New Trip</button>
-    <button class="signout-btn" id="signout-btn" onclick="authSignOut()" title="Sign out" style="display:none">Sign out</button>
+    <div class="profile-wrap" id="profile-wrap">
+      <button class="profile-btn" id="profile-btn" onclick="toggleProfileMenu(event)" title="Account">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg>
+      </button>
+      <div class="profile-dropdown" id="profile-dropdown">
+        <div class="profile-dd-item" onclick="openChangePasswordModal()">🔑 Change password</div>
+        <div class="profile-dd-divider"></div>
+        <div class="profile-dd-item danger" onclick="authSignOut()">Sign out</div>
+      </div>
+    </div>
   </div>
   <div class="tab-bar">
     <button class="tab-btn active" id="tab-btn-pack" onclick="switchTab('pack',this)">📦 Packing List</button>
@@ -406,6 +444,47 @@ li.dayof.checked .item-text{color:var(--muted);}
       </div>
       <div class="edits-json" id="edits-json"></div>
     </div>
+  </div>
+</div>
+
+<!-- Password reset overlay -->
+<div class="pwreset-overlay" id="pwreset-overlay">
+  <div class="pwreset-box">
+    <h2>Set New Password</h2>
+    <p>You arrived via a password reset link. Enter a new password to continue.</p>
+    <div class="modal-field">
+      <label>New Password</label>
+      <input id="pwreset-password" type="password" placeholder="At least 6 characters"
+             onkeydown="if(event.key==='Enter')submitPasswordReset()">
+    </div>
+    <div class="modal-field">
+      <label>Confirm Password</label>
+      <input id="pwreset-confirm" type="password" placeholder="Re-enter password"
+             onkeydown="if(event.key==='Enter')submitPasswordReset()">
+    </div>
+    <div class="pwreset-error" id="pwreset-error"></div>
+    <div class="modal-btns" style="margin-top:1rem"><div class="right" style="width:100%">
+      <button class="btn primary" id="pwreset-btn" onclick="submitPasswordReset()" style="width:100%">Set Password →</button>
+    </div></div>
+  </div>
+</div>
+
+<!-- Patch button -->
+<button class="patch-btn" onclick="openPatchModal()">{ }</button>
+
+<!-- Patch modal -->
+<div class="overlay" id="patch-modal" style="align-items:flex-start;padding-top:2.5rem">
+  <div class="patch-modal-box">
+    <h2>Apply Patch</h2>
+    <textarea class="patch-textarea" id="patch-textarea"
+      placeholder='{"spec":"trip-planner-patch","version":"1.0","ops":[]}'
+      oninput="updatePatchPreview()"></textarea>
+    <div class="patch-preview" id="patch-preview"></div>
+    <div class="patch-error" id="patch-error"></div>
+    <div class="modal-btns" style="margin-top:1rem"><div class="right">
+      <button class="btn" onclick="closeAllModals()">Cancel</button>
+      <button class="btn primary" onclick="confirmApplyPatch()">Apply</button>
+    </div></div>
   </div>
 </div>
 
@@ -1535,7 +1614,7 @@ function showAuthForm() {
 function hideAuthOverlay() {
   document.getElementById('auth-overlay').style.display = 'none';
   if (SUPABASE_CONFIGURED) {
-    document.getElementById('signout-btn').style.display = '';
+    document.getElementById('profile-wrap').classList.add('visible');
   }
 }
 
@@ -1835,7 +1914,10 @@ async function startup() {
   // Watch for future state changes (sign-out, token refresh, etc.)
   // onAuthSuccess has a guard so it's safe even if this and getSession() both fire.
   sb.auth.onAuthStateChange(async (event, session) => {
-    if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session) {
+    if (event === 'PASSWORD_RECOVERY' && session) {
+      await onAuthSuccess(session.user);
+      openPasswordResetModal();
+    } else if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session) {
       await onAuthSuccess(session.user);
     } else if (event === 'SIGNED_OUT') {
       location.reload();
@@ -1874,6 +1956,268 @@ function init() {
   buildTripSelect();
   renderAll();
 }
+// ═══════════════════════════════════
+// PROFILE MENU
+// ═══════════════════════════════════
+function toggleProfileMenu(e) {
+  e.stopPropagation();
+  document.getElementById('profile-dropdown').classList.toggle('open');
+}
+function closeProfileMenu() {
+  document.getElementById('profile-dropdown').classList.remove('open');
+}
+document.addEventListener('click', () => closeProfileMenu());
+
+function openChangePasswordModal() {
+  closeProfileMenu();
+  openPasswordResetModal();
+}
+
+// ═══════════════════════════════════
+// PASSWORD RESET
+// ═══════════════════════════════════
+function openPasswordResetModal() {
+  document.getElementById('pwreset-password').value = '';
+  document.getElementById('pwreset-confirm').value = '';
+  document.getElementById('pwreset-error').textContent = '';
+  document.getElementById('pwreset-overlay').classList.add('visible');
+  setTimeout(() => document.getElementById('pwreset-password').focus(), 100);
+}
+
+async function submitPasswordReset() {
+  const pw  = document.getElementById('pwreset-password').value;
+  const cfm = document.getElementById('pwreset-confirm').value;
+  const err = document.getElementById('pwreset-error');
+  const btn = document.getElementById('pwreset-btn');
+  if (pw.length < 6) { err.textContent = 'Password must be at least 6 characters.'; return; }
+  if (pw !== cfm)    { err.textContent = 'Passwords do not match.'; return; }
+  btn.textContent = 'Saving…'; btn.disabled = true;
+  const { error } = await sb.auth.updateUser({ password: pw });
+  btn.textContent = 'Set Password →'; btn.disabled = false;
+  if (error) { err.textContent = error.message; return; }
+  document.getElementById('pwreset-overlay').classList.remove('visible');
+}
+
+// ═══════════════════════════════════
+// PATCH SYSTEM
+// ═══════════════════════════════════
+function openPatchModal() {
+  document.getElementById('patch-textarea').value = '';
+  document.getElementById('patch-preview').textContent = '';
+  document.getElementById('patch-error').textContent = '';
+  document.getElementById('patch-modal').classList.add('visible');
+  setTimeout(() => document.getElementById('patch-textarea').focus(), 50);
+}
+
+function updatePatchPreview() {
+  const raw = document.getElementById('patch-textarea').value.trim();
+  const previewEl = document.getElementById('patch-preview');
+  const errorEl = document.getElementById('patch-error');
+  if (!raw) { previewEl.textContent = ''; errorEl.textContent = ''; return; }
+  try {
+    const p = JSON.parse(raw);
+    errorEl.textContent = '';
+    if (p.spec !== 'trip-planner-patch') { previewEl.textContent = '⚠ Invalid spec — expected "trip-planner-patch"'; return; }
+    const ops = Array.isArray(p.ops) ? p.ops : [];
+    if (!ops.length) { previewEl.textContent = 'No operations found.'; return; }
+    const counts = {};
+    ops.forEach(o => { counts[o.op] = (counts[o.op]||0)+1; });
+    const summary = Object.entries(counts).map(([op,n]) => n>1?`${op}×${n}`:op).join(', ');
+    previewEl.textContent = `${ops.length} operation${ops.length!==1?'s':''} found: ${summary}`;
+  } catch(e) {
+    previewEl.textContent = '';
+    errorEl.textContent = 'Invalid JSON — ' + e.message;
+  }
+}
+
+function confirmApplyPatch() {
+  const raw = document.getElementById('patch-textarea').value.trim();
+  const errorEl = document.getElementById('patch-error');
+  let p;
+  try { p = JSON.parse(raw); } catch(e) { errorEl.textContent = 'Invalid JSON: ' + e.message; return; }
+  const result = applyPatch(p);
+  if (result.error) { errorEl.textContent = result.error; return; }
+  closeAllModals();
+  const msg = document.createElement('div');
+  msg.style.cssText = 'position:fixed;bottom:4rem;left:1.2rem;background:var(--green);color:#fff;font-size:0.8rem;padding:0.4rem 0.9rem;border-radius:4px;z-index:9999;box-shadow:0 2px 8px rgba(0,0,0,0.15);';
+  msg.textContent = `✓ ${result.applied} op${result.applied!==1?'s':''} applied`;
+  document.body.appendChild(msg);
+  setTimeout(() => msg.remove(), 2500);
+}
+
+function applyPatch(patch) {
+  if (patch.spec !== 'trip-planner-patch') return { error: 'Invalid spec — expected "trip-planner-patch"' };
+  const ops = Array.isArray(patch.ops) ? patch.ops : [];
+  if (!ops.length) return { error: 'No operations in patch' };
+
+  let applied = 0;
+  let tripListChanged = false;
+
+  ops.forEach(op => {
+    try {
+      switch (op.op) {
+        case 'add_item':      _patchAddItem(op); break;
+        case 'remove_item':   _patchRemoveItem(op); break;
+        case 'delete_item':   _patchDeleteItem(op); break;
+        case 'rename_item':   _patchRenameItem(op); break;
+        case 'move_item':     _patchMoveItem(op); break;
+        case 'set_dayof':     _patchSetDayof(op); break;
+        case 'add_cat':       _patchAddCat(op); break;
+        case 'rename_cat':    _patchRenameCat(op); break;
+        case 'delete_cat':    _patchDeleteCat(op); break;
+        case 'add_trip':      tripListChanged = _patchAddTrip(op) || tripListChanged; break;
+        case 'rename_trip':   _patchRenameTrip(op); break;
+        case 'delete_trip':   tripListChanged = _patchDeleteTrip(op) || tripListChanged; break;
+        case 'set_active':    _patchSetActive(op); break;
+        case 'set_checked':   _patchSetChecked(op); break;
+        case 'clear_checked': _patchClearChecked(op); break;
+        default: console.warn('applyPatch: unknown op', op.op); return;
+      }
+      applied++;
+    } catch(e) { console.warn('applyPatch: op failed', op, e); }
+  });
+
+  saveMasterItems();
+  saveMasterCats();
+  if (tripListChanged) saveTripList(getTripList());
+  buildTripSelect();
+  renderAll();
+  return { applied };
+}
+
+function _patchTripIds(trips) {
+  return trips === 'all' ? getTripList() : (Array.isArray(trips) ? trips : []);
+}
+
+function _slugify(name) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
+}
+
+function _patchAddItem(op) {
+  const name = op.name, tab = op.tab || 'pack';
+  const existing = MASTER_ITEMS.find(i => i.name.toLowerCase() === name.toLowerCase());
+  let itemId;
+  if (existing) {
+    itemId = existing.id;
+  } else {
+    itemId = 'i_' + _slugify(name) + '_' + Date.now();
+    MASTER_ITEMS.push({ id:itemId, name, catId:op.catId||'uncategorized', tab,
+      ...(op.subcatLabel ? { subcatLabel:op.subcatLabel } : {}) });
+  }
+  _patchTripIds(op.trips).forEach(tripId => {
+    const ids = getActiveIds(tripId, tab);
+    if (!ids.includes(itemId)) { ids.push(itemId); setActiveIds(tripId, tab, ids); }
+  });
+}
+
+function _patchRemoveItem(op) {
+  const item = getItem(op.id);
+  if (!item) { console.warn('applyPatch remove_item: unknown id', op.id); return; }
+  _patchTripIds(op.trips).forEach(tripId => {
+    setActiveIds(tripId, item.tab, getActiveIds(tripId, item.tab).filter(id => id !== op.id));
+  });
+}
+
+function _patchDeleteItem(op) {
+  const item = getItem(op.id);
+  if (!item) { console.warn('applyPatch delete_item: unknown id', op.id); return; }
+  MASTER_ITEMS = MASTER_ITEMS.filter(i => i.id !== op.id);
+  getTripList().forEach(tripId => {
+    ['pack','todo'].forEach(tab => {
+      setActiveIds(tripId, tab, getActiveIds(tripId, tab).filter(id => id !== op.id));
+    });
+  });
+}
+
+function _patchRenameItem(op) {
+  const item = MASTER_ITEMS.find(i => i.id === op.id);
+  if (!item) { console.warn('applyPatch rename_item: unknown id', op.id); return; }
+  item.name = op.newName;
+}
+
+function _patchMoveItem(op) {
+  const item = MASTER_ITEMS.find(i => i.id === op.id);
+  if (!item) { console.warn('applyPatch move_item: unknown id', op.id); return; }
+  item.catId = op.newCatId;
+}
+
+function _patchSetDayof(op) {
+  const item = getItem(op.id);
+  if (!item) { console.warn('applyPatch set_dayof: unknown id', op.id); return; }
+  const dayofKey = item.tab + 'Dayof', removedKey = item.tab + 'DayofRemoved';
+  const builtinDayof = new Set(TRIP_DEFAULTS[op.trip]?.defaultDayof || []);
+  const d = new Set(gs(op.trip, dayofKey, []));
+  const rem = new Set(gs(op.trip, removedKey, []));
+  if (op.value) {
+    d.add(op.id); rem.delete(op.id);
+  } else {
+    d.delete(op.id);
+    if (builtinDayof.has(op.id)) rem.add(op.id);
+  }
+  ss(op.trip, dayofKey, [...d]);
+  ss(op.trip, removedKey, [...rem]);
+}
+
+function _patchAddCat(op) {
+  if (!MASTER_CATS[op.id]) {
+    MASTER_CATS[op.id] = { id:op.id, icon:op.icon||'📌', title:op.title, tab:op.tab||'pack' };
+  }
+}
+
+function _patchRenameCat(op) {
+  const cat = getCat(op.id);
+  if (!cat) { console.warn('applyPatch rename_cat: unknown id', op.id); return; }
+  if (op.newTitle) cat.title = op.newTitle;
+  if (op.newIcon)  cat.icon  = op.newIcon;
+}
+
+function _patchDeleteCat(op) {
+  if (!MASTER_CATS[op.id]) { console.warn('applyPatch delete_cat: unknown id', op.id); return; }
+  if (!MASTER_CATS['uncategorized']) {
+    MASTER_CATS['uncategorized'] = { id:'uncategorized', icon:'📦', title:'Uncategorized', tab:MASTER_CATS[op.id].tab };
+  }
+  MASTER_ITEMS.forEach(item => { if (item.catId === op.id) item.catId = 'uncategorized'; });
+  delete MASTER_CATS[op.id];
+}
+
+function _patchAddTrip(op) {
+  const trips = getTripList();
+  if (trips.includes(op.id)) return false;
+  ss(op.id, 'name', op.name || op.id);
+  if (op.pack) setActiveIds(op.id, 'pack', op.pack);
+  if (op.todo) setActiveIds(op.id, 'todo', op.todo);
+  if (op.defaultDayof) ss(op.id, 'packDayof', op.defaultDayof);
+  trips.push(op.id);
+  saveTripList(trips);
+  return true;
+}
+
+function _patchRenameTrip(op) {
+  if (!getTripList().includes(op.id)) { console.warn('applyPatch rename_trip: unknown trip', op.id); return; }
+  ss(op.id, 'name', op.newName);
+}
+
+function _patchDeleteTrip(op) {
+  const trips = getTripList().filter(id => id !== op.id);
+  saveTripList(trips);
+  if (currentTrip === op.id && trips.length) currentTrip = trips[0];
+  return true;
+}
+
+function _patchSetActive(op) {
+  setActiveIds(op.trip, op.tab, op.ids || []);
+}
+
+function _patchSetChecked(op) {
+  const checked = gs(op.trip, op.tab+'Checked', {});
+  (op.ids || []).forEach(id => { checked[id] = true; });
+  ss(op.trip, op.tab+'Checked', checked);
+}
+
+function _patchClearChecked(op) {
+  ss(op.trip, op.tab+'Checked', {});
+}
+
 startup();
 </script>
 </body>
