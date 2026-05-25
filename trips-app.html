@@ -262,6 +262,7 @@ li.dayof.checked .item-text{color:var(--muted);}
     <h1>✈️</h1>
     <select class="trip-select" id="trip-select" onchange="switchTrip(this.value)"></select>
     <button class="top-btn green" onclick="openEditsModal()">Edits</button>
+    <button class="top-btn" onclick="openAIContextModal()">AI</button>
     <button class="top-btn ml-auto" onclick="openNewTripModal()">+ New Trip</button>
     <div class="profile-wrap" id="profile-wrap">
       <button class="profile-btn" id="profile-btn" onclick="toggleProfileMenu(event)" title="Account">
@@ -466,6 +467,27 @@ li.dayof.checked .item-text{color:var(--muted);}
     <div class="modal-btns" style="margin-top:1rem"><div class="right" style="width:100%">
       <button class="btn primary" id="pwreset-btn" onclick="submitPasswordReset()" style="width:100%">Set Password →</button>
     </div></div>
+  </div>
+</div>
+
+<!-- AI Context modal -->
+<div class="edits-overlay" id="ai-context-modal">
+  <div class="edits-modal">
+    <div class="edits-modal-header">
+      <h2>AI Context</h2>
+      <button class="edits-modal-close" onclick="closeAIContextModal()">✕</button>
+    </div>
+    <div class="edits-body" style="flex-shrink:0">
+      <p style="font-size:0.82rem;color:var(--muted);line-height:1.5;margin-bottom:0.7rem">Paste this into a Claude conversation, then describe your changes in plain English. Claude will return a patch JSON to paste into the <strong>{ }</strong> button.</p>
+      <div id="ai-context-stats" style="font-size:0.72rem;color:var(--muted);letter-spacing:0.07em;text-transform:uppercase"></div>
+    </div>
+    <div class="edits-json-wrap" style="margin-top:0.8rem">
+      <div class="edits-json-label">
+        <span>Context JSON</span>
+        <button class="copy-btn" id="ai-copy-btn" onclick="copyAIContext()">Copy</button>
+      </div>
+      <div class="edits-json" id="ai-context-json"></div>
+    </div>
   </div>
 </div>
 
@@ -1540,6 +1562,83 @@ function openEditsModal() {
   document.getElementById('copy-btn').classList.remove('copied');
 }
 function closeEditsModal() { document.getElementById('edits-modal').classList.remove('visible'); }
+
+// ═══════════════════════════════════
+// AI CONTEXT MODAL
+// ═══════════════════════════════════
+function buildAIContext() {
+  const trips = getTripList().map(tripId => {
+    const builtinDayof = new Set(TRIP_DEFAULTS[tripId]?.defaultDayof || []);
+    const customDayof  = new Set(gs(tripId, 'packDayof', []));
+    const removedDayof = new Set(gs(tripId, 'packDayofRemoved', []));
+    const effectiveDayof = [
+      ...[...builtinDayof].filter(id => !removedDayof.has(id)),
+      ...[...customDayof].filter(id => !builtinDayof.has(id))
+    ];
+    return {
+      id: tripId,
+      name: getTripName(tripId),
+      packActive: getActiveIds(tripId, 'pack'),
+      todoActive: getActiveIds(tripId, 'todo'),
+      packDayof: effectiveDayof
+    };
+  });
+
+  return {
+    _instructions: "You are helping modify a personal trip packing list app. 'items' is the master library — each item has an id, name, catId, tab (pack|todo), and optional subcatLabel. Each trip has packActive/todoActive arrays of item IDs currently on that list, and packDayof for items flagged to pack the morning of departure. Use the ops in _patch_spec to express any changes the user requests. IMPORTANT: always reference items by their existing id — only use add_item for genuinely new items. Return ONLY a valid patch JSON object (spec + version + ops array), no explanation or markdown.",
+    _patch_spec: {
+      format: { spec: "trip-planner-patch", version: "1.0", ops: [] },
+      ops: {
+        add_item:     { name: "string", catId: "category id", tab: "pack|todo", subcatLabel: "(optional) subcategory label", trips: "array of trip IDs or \"all\"" },
+        update_item:  { id: "item id", name: "(optional) new name", catId: "(optional) new category id", subcatLabel: "(optional) new label string, or null to remove" },
+        remove_item:  { id: "item id", trips: "array of trip IDs or \"all\"" },
+        delete_item:  { id: "item id — permanently removes from library and all trips" },
+        rename_item:  { id: "item id", newName: "string" },
+        move_item:    { id: "item id", newCatId: "category id" },
+        set_dayof:    { id: "item id", trip: "trip id", value: "boolean" },
+        add_cat:      { id: "string slug", icon: "emoji", title: "string", tab: "pack|todo" },
+        rename_cat:   { id: "category id", newTitle: "(optional) string", newIcon: "(optional) emoji" },
+        delete_cat:   { id: "category id — items move to uncategorized" },
+        add_trip:     { id: "string slug", name: "string", pack: "(optional) array of item IDs", todo: "(optional) array of item IDs", defaultDayof: "(optional) array of item IDs" },
+        rename_trip:  { id: "trip id", newName: "string" },
+        delete_trip:  { id: "trip id" },
+        set_active:   { trip: "trip id", tab: "pack|todo", ids: "array of item IDs — replaces entire active list" },
+        set_checked:  { trip: "trip id", tab: "pack|todo", ids: "array of item IDs to mark done" },
+        clear_checked:{ trip: "trip id", tab: "pack|todo" }
+      }
+    },
+    categories: Object.values(MASTER_CATS),
+    items: MASTER_ITEMS,
+    trips
+  };
+}
+
+function openAIContextModal() {
+  const ctx  = buildAIContext();
+  const json = JSON.stringify(ctx, null, 2);
+  document.getElementById('ai-context-json').textContent = json;
+  document.getElementById('ai-context-stats').textContent =
+    `${ctx.items.length} items · ${ctx.categories.length} categories · ${ctx.trips.length} trip${ctx.trips.length !== 1 ? 's' : ''}`;
+  document.getElementById('ai-copy-btn').textContent = 'Copy';
+  document.getElementById('ai-copy-btn').classList.remove('copied');
+  document.getElementById('ai-context-modal').classList.add('visible');
+}
+
+function closeAIContextModal() { document.getElementById('ai-context-modal').classList.remove('visible'); }
+function copyAIContext() {
+  const json = document.getElementById('ai-context-json').textContent;
+  const btn  = document.getElementById('ai-copy-btn');
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(json).then(() => {
+      btn.textContent = 'Copied!'; btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+    }).catch(() => fallbackCopy(json, btn));
+  } else { fallbackCopy(json, btn); }
+}
+document.getElementById('ai-context-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('ai-context-modal')) closeAIContextModal();
+});
+
 function copyEditsJson() {
   const json = document.getElementById('edits-json').textContent;
   const btn = document.getElementById('copy-btn');
@@ -2057,6 +2156,7 @@ function applyPatch(patch) {
     try {
       switch (op.op) {
         case 'add_item':      _patchAddItem(op); break;
+        case 'update_item':   _patchUpdateItem(op); break;
         case 'remove_item':   _patchRemoveItem(op); break;
         case 'delete_item':   _patchDeleteItem(op); break;
         case 'rename_item':   _patchRenameItem(op); break;
@@ -2108,6 +2208,17 @@ function _patchAddItem(op) {
     const ids = getActiveIds(tripId, tab);
     if (!ids.includes(itemId)) { ids.push(itemId); setActiveIds(tripId, tab, ids); }
   });
+}
+
+function _patchUpdateItem(op) {
+  const item = MASTER_ITEMS.find(i => i.id === op.id);
+  if (!item) { console.warn('applyPatch update_item: unknown id', op.id); return; }
+  if (op.name !== undefined) item.name = op.name;
+  if (op.catId !== undefined) item.catId = op.catId;
+  if ('subcatLabel' in op) {
+    if (op.subcatLabel == null || op.subcatLabel === '') delete item.subcatLabel;
+    else item.subcatLabel = op.subcatLabel;
+  }
 }
 
 function _patchRemoveItem(op) {
