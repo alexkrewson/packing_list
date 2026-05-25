@@ -1585,7 +1585,7 @@ function buildAIContext() {
   });
 
   return {
-    _instructions: "You are helping modify a personal trip packing list app. 'items' is the master library — each item has an id, name, catId, tab (pack|todo), and optional subcatLabel. Each trip has packActive/todoActive arrays of item IDs currently on that list, and packDayof for items flagged to pack the morning of departure. Use the ops in _patch_spec to express any changes the user requests. IMPORTANT: always reference items by their existing id — only use add_item for genuinely new items. Return ONLY a valid patch JSON object (spec + version + ops array), no explanation or markdown.",
+    _instructions: `You are helping modify a personal trip packing list app. The user is currently viewing the trip: "${getTripName(currentTrip)}" (id: "${currentTrip}"). When the user says "my list", "this trip", or refers to a trip without naming it, assume they mean this one. 'items' is the master library — each item has an id, name, catId, tab (pack|todo), and optional subcatLabel. Each trip has packActive/todoActive arrays of item IDs currently on that list, and packDayof for items flagged to pack the morning of departure. Use the ops in _patch_spec to express any changes the user requests. IMPORTANT: always reference items by their existing id — only use add_item for genuinely new items. Return ONLY a valid patch JSON object (spec + version + ops array), no explanation or markdown.`,
     _patch_spec: {
       format: { spec: "trip-planner-patch", version: "1.0", ops: [] },
       ops: {
@@ -1607,6 +1607,7 @@ function buildAIContext() {
         clear_checked:{ trip: "trip id", tab: "pack|todo" }
       }
     },
+    activeTrip: { id: currentTrip, name: getTripName(currentTrip) },
     categories: Object.values(MASTER_CATS),
     items: MASTER_ITEMS,
     trips
