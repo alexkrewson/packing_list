@@ -692,7 +692,19 @@ function positionMenu(menu, e) {
   const y = Math.min((tx?tx.clientY:e.clientY)||0, window.innerHeight-200);
   menu.style.left=x+'px'; menu.style.top=y+'px';
 }
-function closeCtxMenu() { if(ctxMenu){ctxMenu.remove();ctxMenu=null;} }
+let ctxKeyHandler = null;
+function closeCtxMenu() {
+  if (ctxMenu) { ctxMenu.remove(); ctxMenu = null; }
+  if (ctxKeyHandler) { document.removeEventListener('keydown', ctxKeyHandler); ctxKeyHandler = null; }
+}
+function _setCtxKeys(map) {
+  ctxKeyHandler = e => {
+    if (!ctxMenu) return;
+    const fn = map[e.key.toLowerCase()];
+    if (fn) { e.preventDefault(); fn(); }
+  };
+  document.addEventListener('keydown', ctxKeyHandler);
+}
 document.addEventListener('click', e=>{ if(ctxMenu&&!ctxMenu.contains(e.target))closeCtxMenu(); });
 document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeCtxMenu();closeAllModals();} });
 
@@ -932,14 +944,17 @@ function attachPoolCtx(li, item, tab) {
     const menu = document.createElement('div');
     menu.className = 'ctx-menu';
     menu.innerHTML = `
-      <div class="ctx-item" id="cpm-add">➕ Add to this list</div>
+      <div class="ctx-item" id="cpm-add">➕ <u>A</u>dd to this list</div>
       <div class="ctx-divider"></div>
-      <div class="ctx-item" id="cpm-edit">✏️ Edit item info</div>
+      <div class="ctx-item" id="cpm-edit">✏️ <u>E</u>dit item info</div>
     `;
-    menu.querySelector('#cpm-add').onclick = () => { addItemToTrip(item.id, tab); closeCtxMenu(); };
-    menu.querySelector('#cpm-edit').onclick = () => { closeCtxMenu(); openEditModal(item, tab, item.catId); };
+    const addFn  = () => { addItemToTrip(item.id, tab); closeCtxMenu(); };
+    const editFn = () => { closeCtxMenu(); openEditModal(item, tab, item.catId); };
+    menu.querySelector('#cpm-add').onclick  = addFn;
+    menu.querySelector('#cpm-edit').onclick = editFn;
     positionMenu(menu, e);
     document.body.appendChild(menu); ctxMenu = menu;
+    _setCtxKeys({ a: addFn, e: editFn });
   };
   li.addEventListener('contextmenu', handler);
   li.addEventListener('touchstart', e=>{ pt=setTimeout(()=>handler(e),500); },{passive:true});
@@ -1001,46 +1016,46 @@ function attachItemCtx(li, item, tab) {
     const menu = document.createElement('div');
     menu.className = 'ctx-menu';
     menu.innerHTML = `
-      <div class="ctx-item" id="cm-dayof">${isDayof?'✕ Remove day-of flag':'☀️ Pack day-of'}</div>
+      <div class="ctx-item" id="cm-dayof">${isDayof?'✕ Remove <u>d</u>ay-of flag':'☀️ Pack <u>d</u>ay-of'}</div>
       <div class="ctx-divider"></div>
-      <div class="ctx-item" id="cm-toggle">${isChecked?'☐ Uncheck':'☑ Check'}</div>
+      <div class="ctx-item" id="cm-toggle">${isChecked?'☐ Un<u>c</u>heck':'☑ <u>C</u>heck'}</div>
       <div class="ctx-divider"></div>
-      ${tab==='pack'?'<div class="ctx-item" id="cm-todo">📋 Add to-do task</div><div class="ctx-divider"></div>':''}
-      <div class="ctx-item" id="cm-edit">✏️ Edit item info</div>
+      ${tab==='pack'?'<div class="ctx-item" id="cm-todo">📋 Add <u>t</u>o-do task</div><div class="ctx-divider"></div>':''}
+      <div class="ctx-item" id="cm-edit">✏️ <u>E</u>dit item info</div>
       <div class="ctx-divider"></div>
-      <div class="ctx-item danger" id="cm-remove">✕ Remove from list</div>
+      <div class="ctx-item danger" id="cm-remove">✕ <u>R</u>emove from list</div>
     `;
-    menu.querySelector('#cm-dayof').onclick = () => {
+    const dayofFn = () => {
       const d = gs(currentTrip, tab+'Dayof', []);
       const s = new Set(d);
       const builtinDayofSet = new Set(TRIP_DEFAULTS[currentTrip]?.defaultDayof||[]);
       if (s.has(item.id)) {
         s.delete(item.id);
-        // If removing a builtin flag, track it as explicitly removed
         if (builtinDayofSet.has(item.id)) {
           const rem = new Set(gs(currentTrip, tab+'DayofRemoved', []));
-          rem.add(item.id);
-          ss(currentTrip, tab+'DayofRemoved', [...rem]);
+          rem.add(item.id); ss(currentTrip, tab+'DayofRemoved', [...rem]);
         }
       } else {
         s.add(item.id);
-        // If re-adding a builtin flag, remove from the removed tracking
         const rem = new Set(gs(currentTrip, tab+'DayofRemoved', []));
-        rem.delete(item.id);
-        ss(currentTrip, tab+'DayofRemoved', [...rem]);
+        rem.delete(item.id); ss(currentTrip, tab+'DayofRemoved', [...rem]);
       }
       ss(currentTrip, tab+'Dayof', [...s]);
       li.classList.toggle('dayof', s.has(item.id) || (builtinDayofSet.has(item.id) && !gs(currentTrip, tab+'DayofRemoved', []).includes(item.id)));
       closeCtxMenu();
     };
-    menu.querySelector('#cm-toggle').onclick = () => { toggleItem(item.id, tab); closeCtxMenu(); };
-    menu.querySelector('#cm-edit').onclick = () => { closeCtxMenu(); openEditModal(item, tab, item.catId); };
-    menu.querySelector('#cm-remove').onclick = () => { removeItemFromTrip(item.id, tab); closeCtxMenu(); };
-    if (tab === 'pack') {
-      menu.querySelector('#cm-todo').onclick = () => { closeCtxMenu(); openSuggestModal(item); };
-    }
+    const toggleFn = () => { toggleItem(item.id, tab); closeCtxMenu(); };
+    const editFn   = () => { closeCtxMenu(); openEditModal(item, tab, item.catId); };
+    const removeFn = () => { removeItemFromTrip(item.id, tab); closeCtxMenu(); };
+    const todoFn   = () => { closeCtxMenu(); openSuggestModal(item); };
+    menu.querySelector('#cm-dayof').onclick = dayofFn;
+    menu.querySelector('#cm-toggle').onclick = toggleFn;
+    menu.querySelector('#cm-edit').onclick   = editFn;
+    menu.querySelector('#cm-remove').onclick = removeFn;
+    if (tab === 'pack') menu.querySelector('#cm-todo').onclick = todoFn;
     positionMenu(menu, e);
     document.body.appendChild(menu); ctxMenu = menu;
+    _setCtxKeys({ d: dayofFn, c: toggleFn, e: editFn, r: removeFn, ...(tab==='pack'?{t:todoFn}:{}) });
   };
   li.addEventListener('contextmenu', handler);
   li.addEventListener('touchstart', e=>{ pressTimer=setTimeout(()=>handler(e),500); },{passive:true});
@@ -1263,17 +1278,21 @@ function attachTodoCtx(li, item) {
     const menu = document.createElement('div');
     menu.className = 'ctx-menu';
     menu.innerHTML = `
-      <div class="ctx-item" id="ctd-toggle">${isChecked?'☐ Uncheck':'☑ Check'}</div>
+      <div class="ctx-item" id="ctd-toggle">${isChecked?'☐ Un<u>c</u>heck':'☑ <u>C</u>heck'}</div>
       <div class="ctx-divider"></div>
-      <div class="ctx-item" id="ctd-edit">✏️ Edit task</div>
+      <div class="ctx-item" id="ctd-edit">✏️ <u>E</u>dit task</div>
       <div class="ctx-divider"></div>
-      <div class="ctx-item danger" id="ctd-remove">✕ Remove from list</div>
+      <div class="ctx-item danger" id="ctd-remove">✕ <u>R</u>emove from list</div>
     `;
-    menu.querySelector('#ctd-toggle').onclick = () => { toggleItem(item.id,'todo'); closeCtxMenu(); };
-    menu.querySelector('#ctd-edit').onclick = () => { closeCtxMenu(); openEditTodoModal(item); };
-    menu.querySelector('#ctd-remove').onclick = () => { removeItemFromTrip(item.id,'todo'); closeCtxMenu(); };
+    const toggleFn = () => { toggleItem(item.id,'todo'); closeCtxMenu(); };
+    const editFn   = () => { closeCtxMenu(); openEditTodoModal(item); };
+    const removeFn = () => { removeItemFromTrip(item.id,'todo'); closeCtxMenu(); };
+    menu.querySelector('#ctd-toggle').onclick = toggleFn;
+    menu.querySelector('#ctd-edit').onclick   = editFn;
+    menu.querySelector('#ctd-remove').onclick = removeFn;
     positionMenu(menu, e);
     document.body.appendChild(menu); ctxMenu = menu;
+    _setCtxKeys({ c: toggleFn, e: editFn, r: removeFn });
   };
   li.addEventListener('contextmenu', handler);
   li.addEventListener('touchstart', e=>{ pressTimer=setTimeout(()=>handler(e),500); },{passive:true});
