@@ -69,8 +69,8 @@ li.checked .item-text{text-decoration:line-through;color:var(--muted);}
 li.dayof{background:var(--amber-bg);}
 li.dayof .item-text{color:var(--amber);}
 li.dayof .cb{border-color:#c27803;}
-li.dayof::before{content:'☀️';font-size:0.68rem;flex-shrink:0;}
 li.dayof.checked .item-text{color:var(--muted);}
+.dayof-badge{font-size:0.6rem;font-weight:500;color:var(--amber);background:rgba(194,120,3,0.12);border-radius:3px;padding:0.08rem 0.35rem;flex-shrink:0;white-space:nowrap;}
 li.pending{background:var(--pending-bg);}
 li.pending .item-text{color:var(--pending);}
 li.pending .cb{border-color:var(--pending);}
@@ -920,13 +920,14 @@ function buildActiveLi(item, tab, checked, dayof, pending) {
   if (isChecked) li.classList.add('checked');
   if (isDayof) li.classList.add('dayof');
   if (pendingTodoId) li.classList.add('pending');
+  const dayofBadge = isDayof ? `<span class="dayof-badge">☀️ Day of</span>` : '';
   let pendingBadge = '';
   if (pendingTodoId) {
     const todoItem = getItem(pendingTodoId);
     const taskName = todoItem ? todoItem.name : '?';
     pendingBadge = `<span class="pending-badge" title="Waiting on: ${taskName}">⏳ ${taskName}</span>`;
   }
-  li.innerHTML = `<span class="cb"></span><span class="item-text">${item.name}</span>${pendingBadge}`;
+  li.innerHTML = `<span class="cb"></span><span class="item-text">${item.name}</span>${dayofBadge}${pendingBadge}`;
   li.onclick = e => { if (!e.target.classList.contains('del-btn')) toggleItem(item.id, tab); };
   if (tab === 'pack') attachItemCtx(li, item, tab);
   else attachTodoCtx(li, item);
