@@ -1,0 +1,10 @@
+SUPABASE MIGRATION NEEDED (run in the Supabase SQL editor)
+===========================================================
+Added in commit 293dc80 (2026-06-07): packPending sync + defaultPendingTask.
+The app code is already pushed and live, but these columns don't exist on
+the production DB yet, so the new fields won't persist/sync until you run:
+
+ALTER TABLE public.trip_state ADD COLUMN IF NOT EXISTS pack_pending JSONB NOT NULL DEFAULT '{}';
+ALTER TABLE public.master_items ADD COLUMN IF NOT EXISTS default_pending_task TEXT;
+
+(schema.sql has already been updated to match — this is just the live-DB migration.)
