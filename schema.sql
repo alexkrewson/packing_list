@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS public.master_items (
   cat_id       TEXT    NOT NULL,
   tab          TEXT    NOT NULL CHECK (tab IN ('pack','todo')),
   subcat_label TEXT,
+  default_pending_task TEXT,
   PRIMARY KEY (user_id, id)
 );
 
@@ -47,6 +48,7 @@ CREATE TABLE IF NOT EXISTS public.trip_state (
   todo_dayof          TEXT[]      NOT NULL DEFAULT '{}',
   pack_dayof_removed  TEXT[]      NOT NULL DEFAULT '{}',
   todo_dayof_removed  TEXT[]      NOT NULL DEFAULT '{}',
+  pack_pending        JSONB       NOT NULL DEFAULT '{}',
   updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (user_id, trip_id)
 );

@@ -292,6 +292,7 @@ li.pending.checked .item-text{color:var(--muted);}
       </button>
       <div class="profile-dropdown" id="profile-dropdown">
         <div class="profile-dd-item" onclick="openChangePasswordModal()">🔑 Change password</div>
+        <div class="profile-dd-item" onclick="openDuplicatesModal()">🧹 Find duplicates</div>
         <div class="profile-dd-divider"></div>
         <div class="profile-dd-item danger" onclick="authSignOut()">Sign out</div>
       </div>
@@ -367,6 +368,14 @@ li.pending.checked .item-text{color:var(--muted);}
     <div class="modal-field" id="new-cat-field" style="display:none">
       <label>New Category Name</label>
       <input id="edit-new-cat" type="text" placeholder="e.g. Electronics">
+    </div>
+    <div class="modal-field" id="edit-item-defaultpending-field" style="display:none">
+      <label>Default "waiting on" task</label>
+      <div style="display:flex;align-items:center;gap:0.5rem">
+        <span id="edit-item-defaultpending-label" style="font-size:0.84rem;color:var(--muted);flex:1">None</span>
+        <button class="btn" type="button" onclick="openDefaultPendingModal(editState.item)">Set…</button>
+      </div>
+      <p class="suggest-subtitle" style="margin-top:0.3rem">When this item is added to a packing list, it'll automatically be flagged as waiting on this task.</p>
     </div>
     <div class="modal-btns">
       <button class="btn danger" onclick="openConfirmDelete()">🗑 Delete Permanently</button>
@@ -513,26 +522,40 @@ li.pending.checked .item-text{color:var(--muted);}
   </div>
 </div>
 
+<!-- Find & merge duplicates modal -->
+<div class="edits-overlay" id="duplicates-modal">
+  <div class="edits-modal">
+    <div class="edits-modal-header">
+      <h2>Find &amp; Merge Duplicates</h2>
+      <button class="edits-modal-close" onclick="closeAllModals()">✕</button>
+    </div>
+    <div class="edits-body" id="duplicates-body"></div>
+  </div>
+</div>
+
 <!-- Pending task modal -->
 <div class="overlay" id="pending-modal">
   <div class="suggest-modal-box">
     <h2 id="pending-modal-title">Waiting on…</h2>
-    <p class="suggest-subtitle">Select an existing to-do task or create a new one. The item will be highlighted until you remove the pending flag.</p>
+    <p class="suggest-subtitle" id="pending-modal-subtitle">Select an existing to-do task or create a new one. The item will be highlighted until you remove the pending flag.</p>
     <div class="pending-radio-list" id="pending-radio-list"></div>
     <div class="suggest-divider">Or create a new task</div>
     <div class="suggest-custom-row">
       <input id="pending-new-task" type="text" placeholder="Task name…"
              onkeydown="if(event.key==='Enter')submitPendingModal()">
     </div>
-    <div class="suggest-cat-row">
+    <div class="suggest-cat-row" id="pending-cat-row">
       <label>Category</label>
       <select id="pending-cat-select" onchange="onPendingCatChange()"></select>
       <input id="pending-newcat-input" class="suggest-newcat-input" type="text" placeholder="New category name…">
     </div>
-    <div class="modal-btns"><div class="right">
-      <button class="btn" onclick="closeAllModals()">Cancel</button>
-      <button class="btn primary" onclick="submitPendingModal()">Link →</button>
-    </div></div>
+    <div class="modal-btns">
+      <button class="btn danger" id="pending-clear-btn" onclick="clearDefaultPendingTask()" style="display:none">Clear default</button>
+      <div class="right">
+        <button class="btn" onclick="closeAllModals()">Cancel</button>
+        <button class="btn primary" id="pending-submit-btn" onclick="submitPendingModal()">Link →</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -591,22 +614,22 @@ let MASTER_ITEMS = [
   {id:'i_laptop',     name:'Work computer & charger',       catId:'work',      tab:'pack'},
   // Tech
   {id:'i_carSec',     name:'Car security devices',          catId:'tech',      tab:'pack'},
-  {id:'i_fieldy',     name:'Fieldy',                        catId:'tech',      tab:'pack'},
-  {id:'i_headphones', name:'Headphones',                    catId:'tech',      tab:'pack'},
+  {id:'i_fieldy',     name:'Fieldy',                        catId:'tech',      tab:'pack', defaultPendingTask:'Charge things'},
+  {id:'i_headphones', name:'Headphones',                    catId:'tech',      tab:'pack', defaultPendingTask:'Charge things'},
   {id:'i_hidcam',     name:'Hidden camera detector',        catId:'tech',      tab:'pack'},
-  {id:'i_jumpstart',  name:'Jump starter',                  catId:'tech',      tab:'pack'},
-  {id:'i_tablet',     name:'Tablet',                        catId:'tech',      tab:'pack'},
+  {id:'i_jumpstart',  name:'Jump starter',                  catId:'tech',      tab:'pack', defaultPendingTask:'Charge things'},
+  {id:'i_tablet',     name:'Tablet',                        catId:'tech',      tab:'pack', defaultPendingTask:'Charge things'},
   {id:'i_travelchg',  name:'Travel chargers',               catId:'tech',      tab:'pack'},
-  {id:'i_esk8',       name:'Electric skateboard & charger', catId:'tech',      tab:'pack'},
+  {id:'i_esk8',       name:'Electric skateboard & charger', catId:'tech',      tab:'pack', defaultPendingTask:'Charge things'},
   {id:'i_extmon',     name:'External monitor + cables',     catId:'tech',      tab:'pack'},
   {id:'i_powerstrip', name:'Power strip',                   catId:'tech',      tab:'pack'},
-  {id:'i_solar',      name:'Solar generator & charger',     catId:'tech',      tab:'pack'},
+  {id:'i_solar',      name:'Solar generator & charger',     catId:'tech',      tab:'pack', defaultPendingTask:'Charge things'},
   // Hygiene
-  {id:'i_etoothbrush',name:'Electric toothbrush',           catId:'hygiene',   tab:'pack'},
+  {id:'i_etoothbrush',name:'Electric toothbrush',           catId:'hygiene',   tab:'pack', defaultPendingTask:'Charge things'},
   {id:'i_hygi',       name:'Hygiene items',                 catId:'hygiene',   tab:'pack'},
   {id:'i_mouthguard', name:'Mouth guard',                   catId:'hygiene',   tab:'pack'},
   {id:'i_sleepmask',  name:'Sleep mask',                    catId:'hygiene',   tab:'pack'},
-  {id:'i_waterpik',   name:'Waterpik',                      catId:'hygiene',   tab:'pack'},
+  {id:'i_waterpik',   name:'Waterpik',                      catId:'hygiene',   tab:'pack', defaultPendingTask:'Charge things'},
   {id:'i_handsoap',   name:'Hand soap',                     catId:'hygiene',   tab:'pack'},
   // Food
   {id:'i_ag',         name:'Athletic Greens',               catId:'food',      tab:'pack'},
@@ -678,10 +701,10 @@ let MASTER_ITEMS = [
   {id:'i_yogablocks', name:'Yoga blocks',                   catId:'gym',       tab:'pack', subcatLabel:'Yoga'},
   {id:'i_towel',      name:'Towel',                         catId:'gym',       tab:'pack', subcatLabel:'Shower'},
   // Drone
-  {id:'i_dronebatt',  name:'Batteries & charger',           catId:'drone',     tab:'pack'},
+  {id:'i_dronebatt',  name:'Batteries & charger',           catId:'drone',     tab:'pack', defaultPendingTask:'Charge things'},
   {id:'i_droneunit',  name:'Drone & spare parts',           catId:'drone',     tab:'pack'},
-  {id:'i_goggles',    name:'Goggles',                       catId:'drone',     tab:'pack'},
-  {id:'i_controller', name:'Radio controller',              catId:'drone',     tab:'pack'},
+  {id:'i_goggles',    name:'Goggles',                       catId:'drone',     tab:'pack', defaultPendingTask:'Charge things'},
+  {id:'i_controller', name:'Radio controller',              catId:'drone',     tab:'pack', defaultPendingTask:'Charge things'},
   // Bag
   {id:'i_pepgelb',    name:'Pepper gel',                    catId:'bag',       tab:'pack'},
   // Todo
@@ -1049,7 +1072,11 @@ function toggleItem(itemId, tab) {
 
 function addItemToTrip(itemId, tab) {
   const ids = getActiveIds(currentTrip, tab);
-  if (!ids.includes(itemId)) { ids.push(itemId); setActiveIds(currentTrip, tab, ids); }
+  if (!ids.includes(itemId)) {
+    ids.push(itemId);
+    setActiveIds(currentTrip, tab, ids);
+    if (tab === 'pack') applyDefaultPendingTask(itemId);
+  }
   renderTab(tab);
 }
 
@@ -1380,6 +1407,15 @@ function openEditModal(item, tab, catId) {
     document.getElementById('new-cat-field').style.display = catSel.value==='__new__' ? 'block' : 'none';
   };
   document.getElementById('new-cat-field').style.display = 'none';
+
+  const dpField = document.getElementById('edit-item-defaultpending-field');
+  if (tab === 'pack') {
+    dpField.style.display = 'block';
+    document.getElementById('edit-item-defaultpending-label').textContent = item.defaultPendingTask || 'None';
+  } else {
+    dpField.style.display = 'none';
+  }
+
   document.getElementById('edit-item-modal').classList.add('visible');
   setTimeout(() => document.getElementById('edit-item-name').focus(), 50);
 }
@@ -1663,17 +1699,21 @@ function buildAIContext() {
       ...[...builtinDayof].filter(id => !removedDayof.has(id)),
       ...[...customDayof].filter(id => !builtinDayof.has(id))
     ];
+    const packChecked = gs(tripId, 'packChecked', {});
+    const todoChecked = gs(tripId, 'todoChecked', {});
     return {
       id: tripId,
       name: getTripName(tripId),
       packActive: getActiveIds(tripId, 'pack'),
       todoActive: getActiveIds(tripId, 'todo'),
-      packDayof: effectiveDayof
+      packDayof: effectiveDayof,
+      packChecked: Object.keys(packChecked).filter(id => packChecked[id]),
+      todoChecked: Object.keys(todoChecked).filter(id => todoChecked[id])
     };
   });
 
   return {
-    _instructions: `You are helping modify a personal trip packing list app. The user is currently viewing the trip: "${getTripName(currentTrip)}" (id: "${currentTrip}"). When the user says "my list", "this trip", or refers to a trip without naming it, assume they mean this one. 'items' is the master library — each item has an id, name, catId, tab (pack|todo), and optional subcatLabel. Each trip has packActive/todoActive arrays of item IDs currently on that list, and packDayof for items flagged to pack the morning of departure. Use the ops in _patch_spec to express any changes the user requests. IMPORTANT: always reference items by their existing id — only use add_item for genuinely new items. Return ONLY a valid patch JSON object (spec + version + ops array), no explanation or markdown.`,
+    _instructions: `You are helping modify a personal trip packing list app. The user is currently viewing the trip: "${getTripName(currentTrip)}" (id: "${currentTrip}"). When the user says "my list", "this trip", or refers to a trip without naming it, assume they mean this one. 'items' is the master library — each item has an id, name, catId, tab (pack|todo), and optional subcatLabel. Each trip has packActive/todoActive arrays of item IDs currently on that list, packDayof for items flagged to pack the morning of departure, and packChecked/todoChecked arrays of item IDs already packed/done. Use the ops in _patch_spec to express any changes the user requests. IMPORTANT: always reference items by their existing id — only use add_item for genuinely new items. Return ONLY a valid patch JSON object (spec + version + ops array), no explanation or markdown.`,
     _patch_spec: {
       format: { spec: "trip-planner-patch", version: "1.0", ops: [] },
       ops: {
@@ -1905,7 +1945,8 @@ async function loadUserData(userId) {
     if (items && items.length) {
       localStorage.setItem('masterItems', JSON.stringify(
         items.map(r => ({ id:r.id, name:r.name, catId:r.cat_id, tab:r.tab,
-          ...(r.subcat_label ? { subcatLabel: r.subcat_label } : {}) }))
+          ...(r.subcat_label ? { subcatLabel: r.subcat_label } : {}),
+          ...(r.default_pending_task ? { defaultPendingTask: r.default_pending_task } : {}) }))
       ));
     }
 
@@ -1940,6 +1981,7 @@ async function loadUserData(userId) {
         set('todoDayof',         s.todo_dayof);
         set('packDayofRemoved',  s.pack_dayof_removed);
         set('todoDayofRemoved',  s.todo_dayof_removed);
+        set('packPending',       s.pack_pending);
       });
     }
 
@@ -1964,7 +2006,7 @@ async function pushAllToSupabase(userId) {
     const items = JSON.parse(localStorage.getItem('masterItems') || 'null');
     if (items && items.length) {
       await sb.from('master_items').upsert(
-        items.map(i => ({ user_id:userId, id:i.id, name:i.name, cat_id:i.catId, tab:i.tab, subcat_label:i.subcatLabel||null }))
+        items.map(i => ({ user_id:userId, id:i.id, name:i.name, cat_id:i.catId, tab:i.tab, subcat_label:i.subcatLabel||null, default_pending_task:i.defaultPendingTask||null }))
       );
     }
     const cats = JSON.parse(localStorage.getItem('masterCats') || 'null');
@@ -1990,7 +2032,8 @@ async function pushAllToSupabase(userId) {
           pack_dayof:         ga('packDayof')         || [],
           todo_dayof:         ga('todoDayof')         || [],
           pack_dayof_removed: ga('packDayofRemoved')  || [],
-          todo_dayof_removed: ga('todoDayofRemoved')  || []
+          todo_dayof_removed: ga('todoDayofRemoved')  || [],
+          pack_pending:       ga('packPending')       || {}
         };
       });
       await sb.from('trip_state').upsert(stateRows);
@@ -2030,6 +2073,7 @@ async function _flushTripState(tripId) {
       todo_dayof:         ga('todoDayof')         || [],
       pack_dayof_removed: ga('packDayofRemoved')  || [],
       todo_dayof_removed: ga('todoDayofRemoved')  || [],
+      pack_pending:       ga('packPending')       || {},
       updated_at:         new Date().toISOString()
     });
   } catch(e) { console.error('Trip state sync error:', e); }
@@ -2059,7 +2103,7 @@ async function syncMasterItemsToSupabase() {
     await sb.from('master_items').delete().eq('user_id', currentUserId);
     if (MASTER_ITEMS.length) {
       await sb.from('master_items').insert(
-        MASTER_ITEMS.map(i => ({ user_id:currentUserId, id:i.id, name:i.name, cat_id:i.catId, tab:i.tab, subcat_label:i.subcatLabel||null }))
+        MASTER_ITEMS.map(i => ({ user_id:currentUserId, id:i.id, name:i.name, cat_id:i.catId, tab:i.tab, subcat_label:i.subcatLabel||null, default_pending_task:i.defaultPendingTask||null }))
       );
     }
   } catch(e) { console.error('Master items sync error:', e); }
@@ -2229,7 +2273,7 @@ function _selectAddSugg(tab, catId) {
 // ═══════════════════════════════════
 // PENDING (waiting on a task)
 // ═══════════════════════════════════
-let pendingState = { item: null };
+let pendingState = { item: null, mode: 'trip' };
 
 function getPending(trip) { return gs(trip, 'packPending', {}); }
 function savePending(trip, pending) { ss(trip, 'packPending', pending); }
@@ -2242,31 +2286,89 @@ function clearPendingForItem(itemId) {
   renderAll();
 }
 
-function openPendingModal(item) {
-  pendingState = { item };
-  document.getElementById('pending-modal-title').textContent = `"${item.name}" is waiting on…`;
+// If a library item has a defaultPendingTask, automatically link it to that
+// to-do task (creating it if needed) the first time the item lands on a trip's pack list.
+function applyDefaultPendingTask(itemId) {
+  const item = getItem(itemId);
+  if (!item || !item.defaultPendingTask) return;
+  const pending = getPending(currentTrip);
+  if (pending[itemId]) return;
+  addTodoItem(item.defaultPendingTask, TODO_CAT_GENERAL);
+  const todo = MASTER_ITEMS.find(i => i.name.toLowerCase() === item.defaultPendingTask.toLowerCase() && i.tab === 'todo');
+  if (todo) {
+    pending[itemId] = todo.id;
+    savePending(currentTrip, pending);
+  }
+}
 
-  populateTodoCatSelect('pending-cat-select', 'pending-newcat-input', 'prep_general');
+function _renderPendingRadioOptions(options) {
+  const list = document.getElementById('pending-radio-list');
+  if (!options.length) {
+    list.innerHTML = '<div class="pending-empty">No to-do tasks yet — create one below.</div>';
+  } else {
+    list.innerHTML = options.map(o =>
+      `<label class="pending-radio-item"><input type="radio" name="pending-todo" value="${o.value}" ${o.selected?'checked':''}><span>${o.label}</span></label>`
+    ).join('');
+  }
+}
+
+function openPendingModal(item) {
+  pendingState = { item, mode: 'trip' };
+  document.getElementById('pending-modal-title').textContent = `"${item.name}" is waiting on…`;
+  document.getElementById('pending-modal-subtitle').textContent =
+    'Select an existing to-do task or create a new one. The item will be highlighted until you remove the pending flag.';
+  document.getElementById('pending-cat-row').style.display = 'flex';
+  document.getElementById('pending-clear-btn').style.display = 'none';
+  document.getElementById('pending-submit-btn').textContent = 'Link →';
+
+  populateTodoCatSelect('pending-cat-select', 'pending-newcat-input', TODO_CAT_GENERAL);
   document.getElementById('pending-new-task').value = '';
 
   const todoIds = getActiveIds(currentTrip, 'todo');
-  const currentPending = getPending(currentTrip);
-  const linkedTodoId = currentPending[item.id];
-  const list = document.getElementById('pending-radio-list');
-
-  if (!todoIds.length) {
-    list.innerHTML = '<div class="pending-empty">No to-do tasks yet — create one below.</div>';
-  } else {
-    list.innerHTML = todoIds.map(id => {
-      const todo = getItem(id);
-      if (!todo) return '';
-      const sel = id === linkedTodoId ? 'checked' : '';
-      return `<label class="pending-radio-item"><input type="radio" name="pending-todo" value="${id}" ${sel}><span>${todo.name}</span></label>`;
-    }).filter(Boolean).join('');
-  }
+  const linkedTodoId = getPending(currentTrip)[item.id];
+  _renderPendingRadioOptions(
+    todoIds.map(id => getItem(id)).filter(Boolean)
+      .map(t => ({ value: t.id, label: t.name, selected: t.id === linkedTodoId }))
+  );
 
   document.getElementById('pending-modal').classList.add('visible');
   setTimeout(() => document.getElementById('pending-new-task').focus(), 50);
+}
+
+// Reuses the pending modal's "select existing or create new" UI to set a
+// library item's default "waiting on" task (applied automatically via applyDefaultPendingTask).
+function openDefaultPendingModal(item) {
+  pendingState = { item, mode: 'default' };
+  document.getElementById('pending-modal-title').textContent = `Default "waiting on" task`;
+  document.getElementById('pending-modal-subtitle').textContent =
+    `Pick or create a to-do task that "${item.name}" should automatically be linked to whenever it's added to a packing list.`;
+  document.getElementById('pending-cat-row').style.display = 'none';
+  document.getElementById('pending-clear-btn').style.display = item.defaultPendingTask ? 'inline-block' : 'none';
+  document.getElementById('pending-submit-btn').textContent = 'Set →';
+
+  document.getElementById('pending-new-task').value = '';
+
+  const current = (item.defaultPendingTask || '').toLowerCase();
+  const seen = new Set();
+  const opts = MASTER_ITEMS
+    .filter(i => i.tab === 'todo' && !seen.has(i.name.toLowerCase()) && seen.add(i.name.toLowerCase()))
+    .map(t => ({ value: t.name, label: t.name, selected: !!current && t.name.toLowerCase() === current }));
+  _renderPendingRadioOptions(opts);
+
+  document.getElementById('pending-modal').classList.add('visible');
+  setTimeout(() => document.getElementById('pending-new-task').focus(), 50);
+}
+
+function clearDefaultPendingTask() {
+  const item = pendingState.item;
+  if (!item) return;
+  const master = MASTER_ITEMS.find(i => i.id === item.id);
+  if (master) {
+    delete master.defaultPendingTask;
+    saveMasterItems();
+  }
+  closeAllModals();
+  if (master) openEditModal(master, 'pack', master.catId);
 }
 
 function onPendingCatChange() {
@@ -2280,8 +2382,21 @@ function submitPendingModal() {
 
   const newTaskName = document.getElementById('pending-new-task').value.trim();
   const selectedRadio = document.querySelector('input[name="pending-todo"]:checked');
-  let todoId = null;
 
+  if (pendingState.mode === 'default') {
+    const taskName = newTaskName || (selectedRadio ? selectedRadio.value : null);
+    if (!taskName) return;
+    const master = MASTER_ITEMS.find(i => i.id === item.id);
+    if (master) {
+      master.defaultPendingTask = taskName;
+      saveMasterItems();
+    }
+    closeAllModals();
+    if (master) openEditModal(master, 'pack', master.catId);
+    return;
+  }
+
+  let todoId = null;
   if (newTaskName) {
     let catId = document.getElementById('pending-cat-select').value;
     if (catId === '__new__') {
@@ -2305,6 +2420,129 @@ function submitPendingModal() {
   }
 
   closeAllModals();
+  renderAll();
+}
+
+// ═══════════════════════════════════
+// FIND & MERGE DUPLICATES
+// ═══════════════════════════════════
+let duplicatesState = { groups: [] };
+
+// Items in the same tab whose normalized name stems match are considered near-duplicates
+// (reuses the same stemming the add-item autocomplete uses to match singular/plural variants).
+function findDuplicateGroups() {
+  const groups = {};
+  MASTER_ITEMS.forEach(item => {
+    const key = item.tab + ':' + _normStem(item.name);
+    (groups[key] = groups[key] || []).push(item);
+  });
+  return Object.values(groups).filter(g => g.length > 1);
+}
+
+function openDuplicatesModal() {
+  duplicatesState.groups = findDuplicateGroups();
+  renderDuplicatesBody();
+  document.getElementById('duplicates-modal').classList.add('visible');
+}
+
+function renderDuplicatesBody() {
+  const body = document.getElementById('duplicates-body');
+  const groups = duplicatesState.groups;
+  if (!groups.length) {
+    body.innerHTML = '<p class="pending-empty">No duplicate items found in your library. 🎉</p>';
+    return;
+  }
+  body.innerHTML = `<p style="font-size:0.82rem;color:var(--muted);line-height:1.5;margin-bottom:0.9rem">
+    These items have very similar names. Pick which one to keep — the others will be merged into it across every trip (active lists, checked status, day-of flags, and pending links), then removed from the library.</p>`
+    + groups.map((g, gi) => `
+      <div class="dup-group" style="margin-bottom:1.1rem;padding-bottom:1.1rem;border-bottom:1px dotted var(--line)">
+        <div style="font-size:0.7rem;color:var(--muted);margin-bottom:0.4rem;text-transform:uppercase;letter-spacing:0.07em">${g[0].tab === 'pack' ? '📦 Pack' : '📋 To-do'} · ${g.length} similar items</div>
+        <div class="pending-radio-list">${g.map((item, i) => `
+          <label class="pending-radio-item">
+            <input type="radio" name="dup-survivor-${gi}" value="${item.id}" ${i===0?'checked':''}>
+            <span>${item.name}${item.subcatLabel ? ` · <span style="color:var(--muted)">${item.subcatLabel}</span>` : ''} — <span style="color:var(--muted)">${getCat(item.catId)?.title || item.catId}</span></span>
+          </label>`).join('')}
+        </div>
+        <div style="margin-top:0.6rem"><button class="btn primary" onclick="mergeDuplicateGroup(${gi})">Merge into selected →</button></div>
+      </div>`).join('');
+}
+
+function mergeDuplicateGroup(gi) {
+  const group = duplicatesState.groups[gi];
+  if (!group) return;
+  const radio = document.querySelector(`input[name="dup-survivor-${gi}"]:checked`);
+  if (!radio) return;
+  const survivorId = radio.value;
+  const removeIds = group.map(i => i.id).filter(id => id !== survivorId);
+  if (!removeIds.length) return;
+
+  mergeItemsInto(survivorId, removeIds);
+
+  duplicatesState.groups = findDuplicateGroups();
+  renderDuplicatesBody();
+}
+
+// Repoints every reference to `removeIds` (active lists, checked maps, day-of flags,
+// pending links — as both waiter and waited-on) to `survivorId`, then deletes them from the library.
+function mergeItemsInto(survivorId, removeIds) {
+  const removeSet = new Set(removeIds);
+  const survivor = getItem(survivorId);
+  if (!survivor) return;
+
+  const remap  = id => removeSet.has(id) ? survivorId : id;
+  const dedupe = arr => [...new Set(arr.map(remap))];
+
+  getTripList().forEach(tripId => {
+    ['pack','todo'].forEach(tab => {
+      const active = getActiveIds(tripId, tab);
+      if (active.some(id => removeSet.has(id))) setActiveIds(tripId, tab, dedupe(active));
+
+      const checked = gs(tripId, tab+'Checked', {});
+      let checkedChanged = false;
+      removeIds.forEach(id => {
+        if (id in checked) {
+          if (checked[id]) checked[survivorId] = true;
+          delete checked[id];
+          checkedChanged = true;
+        }
+      });
+      if (checkedChanged) ss(tripId, tab+'Checked', checked);
+
+      const dayof = gs(tripId, tab+'Dayof', []);
+      if (dayof.some(id => removeSet.has(id))) ss(tripId, tab+'Dayof', dedupe(dayof));
+
+      const dayofRemoved = gs(tripId, tab+'DayofRemoved', []);
+      if (dayofRemoved.some(id => removeSet.has(id))) ss(tripId, tab+'DayofRemoved', dedupe(dayofRemoved));
+    });
+
+    const pending = getPending(tripId);
+    let pendingChanged = false;
+    Object.keys(pending).forEach(itemId => {
+      const todoId = pending[itemId];
+      const newItemId = remap(itemId), newTodoId = remap(todoId);
+      if (newItemId !== itemId || newTodoId !== todoId) {
+        delete pending[itemId];
+        pending[newItemId] = newTodoId;
+        pendingChanged = true;
+      }
+    });
+    if (pendingChanged) savePending(tripId, pending);
+  });
+
+  if (!survivor.defaultPendingTask) {
+    const withDefault = removeIds.map(getItem).find(i => i && i.defaultPendingTask);
+    if (withDefault) survivor.defaultPendingTask = withDefault.defaultPendingTask;
+  }
+
+  const deleted = gs('__meta__', 'permanentlyDeleted', []);
+  removeIds.forEach(id => {
+    const item = getItem(id);
+    if (item) deleted.push({ id: item.id, name: item.name, catId: item.catId, tab: item.tab, deletedAt: Date.now() });
+  });
+  ss('__meta__', 'permanentlyDeleted', deleted);
+
+  MASTER_ITEMS = MASTER_ITEMS.filter(i => !removeSet.has(i.id));
+  saveMasterItems();
   renderAll();
 }
 
