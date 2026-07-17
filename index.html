@@ -55,6 +55,16 @@ body{background:var(--paper);color:var(--ink);font-family:'DM Sans',sans-serif;m
 .add-btn:hover{color:var(--accent);transform:scale(1.2);}
 .subcategory-label{font-size:0.68rem;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);padding:0.25rem 0 0.1rem;}
 
+/* Pack containers (tree) */
+.container-node{margin-bottom:0.2rem;}
+.container-node.depth-0{margin-bottom:1rem;}
+.container-header{cursor:default;}
+.container-cb{cursor:pointer;}
+.container-node .container-node .cat-title{font-size:0.78rem;letter-spacing:0.03em;}
+.container-node .container-node .cat-icon{font-size:0.85rem;}
+.container-li{display:block;border-bottom:none;padding:0.3rem 0 0.1rem;cursor:default;}
+.container-li:hover{background:none;}
+
 /* List items */
 ul{list-style:none;border-left:1.5px solid var(--line);padding-left:1rem;}
 li{font-size:0.88rem;font-weight:300;color:var(--ink);padding:0.3rem 0.2rem;border-bottom:1px dotted var(--line);display:flex;align-items:center;gap:0.6rem;line-height:1.4;cursor:pointer;border-radius:3px;transition:background 0.15s;user-select:none;}
@@ -65,6 +75,10 @@ li:hover{background:rgba(0,0,0,0.03);}
 li.checked .cb{background:var(--green);border-color:var(--green);}
 li.checked .cb::after{transform:rotate(40deg) scale(1);}
 li.checked .item-text{text-decoration:line-through;color:var(--muted);}
+.cb.checked{background:var(--green);border-color:var(--green);}
+.cb.checked::after{transform:rotate(40deg) scale(1);}
+.cb.indeterminate{border-color:var(--green);}
+.cb.indeterminate::after{left:2px;top:5px;width:8px;height:2px;border:none;background:var(--green);transform:none;}
 .item-text{transition:color 0.15s;flex:1;}
 li.dayof{background:var(--amber-bg);}
 li.dayof .item-text{color:var(--amber);}
@@ -362,12 +376,16 @@ li.pending.checked .item-text{color:var(--muted);}
       <input id="edit-item-name" type="text">
     </div>
     <div class="modal-field">
-      <label>Category</label>
+      <label id="edit-item-cat-label">Category</label>
       <select id="edit-item-cat"></select>
     </div>
     <div class="modal-field" id="new-cat-field" style="display:none">
-      <label>New Category Name</label>
+      <label id="edit-new-cat-label">New Category Name</label>
       <input id="edit-new-cat" type="text" placeholder="e.g. Electronics">
+      <div id="new-container-parent-row" style="display:none;margin-top:0.5rem">
+        <label style="font-size:0.78rem;color:var(--muted)">Parent container</label>
+        <select id="edit-new-container-parent"></select>
+      </div>
     </div>
     <div class="modal-field" id="edit-item-defaultpending-field" style="display:none">
       <label>Default "waiting on" task</label>
@@ -393,7 +411,7 @@ li.pending.checked .item-text{color:var(--muted);}
     <h2>Permanently Delete?</h2>
     <p class="confirm-msg" id="confirm-msg"></p>
     <div class="modal-btns"><div class="right">
-      <button class="btn" onclick="closeAllModals();openEditModal(editState.item,editState.tab,editState.catId)">Cancel</button>
+      <button class="btn" onclick="closeAllModals();openEditModal(editState.item,editState.tab,editState.groupId)">Cancel</button>
       <button class="btn danger" onclick="permanentlyDeleteItem()">Delete from all trips</button>
     </div></div>
   </div>
@@ -582,21 +600,12 @@ li.pending.checked .item-text{color:var(--muted);}
 // ═══════════════════════════════════
 // MASTER LIBRARY
 // ═══════════════════════════════════
-// Each item: { id, name, catId, tab }
-// Categories: { id, icon, title, tab }
+// Pack items: { id, name, containerId, tab, order, defaultPendingTask? }
+// Todo items: { id, name, catId, tab }
+// Containers (pack tab, tree via parentId): { id, name, icon, parentId, order }
+// Categories (todo tab, flat): { id, icon, title, tab }
 
 const MASTER_CATS = {
-  // Pack cats
-  work:      { id:'work',     icon:'💼', title:'Work',            tab:'pack' },
-  tech:      { id:'tech',     icon:'🔌', title:'Tech & Power',    tab:'pack' },
-  hygiene:   { id:'hygiene',  icon:'🧴', title:'Hygiene & Health',tab:'pack' },
-  food:      { id:'food',     icon:'☕', title:'Food & Drink',    tab:'pack' },
-  clothing:  { id:'clothing', icon:'👟', title:'Clothing',        tab:'pack' },
-  tilly:     { id:'tilly',    icon:'🐕', title:'Tilly',           tab:'pack' },
-  household: { id:'household',icon:'🏠', title:'Household',       tab:'pack' },
-  gym:       { id:'gym',      icon:'🏋️', title:'Gym & Shower',    tab:'pack' },
-  drone:     { id:'drone',    icon:'🚁', title:'Tiny Whoop',      tab:'pack' },
-  bag:       { id:'bag',      icon:'🎒', title:'Overnight Bag',   tab:'pack' },
   // Todo cats
   shopping:  { id:'shopping', icon:'🛒', title:'Shopping',        tab:'todo' },
   home:      { id:'home',     icon:'🏠', title:'Home',            tab:'todo' },
@@ -605,108 +614,116 @@ const MASTER_CATS = {
   tillytodo: { id:'tillytodo',icon:'🐕', title:'Tilly',           tab:'todo' },
 };
 
+// Pack-tab containers — a tree via parentId (null = top level). `order` is a single
+// counter shared with MASTER_ITEMS' `order` field, so a sub-container can be
+// interleaved with items as an ordinary sibling within its parent, not just grouped
+// separately. 'c_loose' is the always-present fallback container for pack items
+// with no containerId (mirrors the ensureTodoCats() pattern below).
+let MASTER_CONTAINERS = [
+  { id:'c_loose',       name:'Loose',         icon:'🧳', parentId:null,     order:0   },
+  { id:'c_box1',        name:'Box 1',         icon:'📦', parentId:null,     order:10  },
+  { id:'c_box2',        name:'Box 2',         icon:'📦', parentId:null,     order:50  },
+  { id:'c_tillysStuff', name:"Tilly's Stuff", icon:'🐕', parentId:'c_box2', order:140 },
+  { id:'c_clothesBag',  name:'Clothes Bag',   icon:'👕', parentId:null,     order:200 },
+  { id:'c_hygieneBag',  name:'Hygiene Bag',   icon:'🧴', parentId:null,     order:310 },
+  { id:'c_largeStuff',  name:'Large Stuff',   icon:'📐', parentId:null,     order:390 },
+  { id:'c_surfBucket',  name:'Surf Bucket',   icon:'🏄', parentId:null,     order:510 },
+  { id:'c_backpack',    name:'Backpack',      icon:'🎒', parentId:null,     order:590 },
+  { id:'c_chargerBag',  name:'Charger Bag',   icon:'🔌', parentId:null,     order:670 },
+  { id:'c_car',         name:'Car',           icon:'🚐', parentId:null,     order:720 },
+  { id:'c_fannyPack',   name:'Fanny Pack',    icon:'👝', parentId:'c_car',  order:760 },
+  { id:'c_me',          name:'Me',            icon:'🙋', parentId:null,     order:810 },
+];
+
 // Master item list — single source of truth
-// subcatLabel is optional for subcategory display within clothing etc.
 let MASTER_ITEMS = [
-  // Work
-  {id:'i_compAcc',    name:'Computer accessories',          catId:'work',      tab:'pack'},
-  {id:'i_badge',      name:'Work badge',                    catId:'work',      tab:'pack'},
-  {id:'i_laptop',     name:'Work computer & charger',       catId:'work',      tab:'pack'},
-  // Tech
-  {id:'i_carSec',     name:'Car security devices',          catId:'tech',      tab:'pack'},
-  {id:'i_fieldy',     name:'Fieldy',                        catId:'tech',      tab:'pack', defaultPendingTask:'Charge things'},
-  {id:'i_headphones', name:'Headphones',                    catId:'tech',      tab:'pack', defaultPendingTask:'Charge things'},
-  {id:'i_hidcam',     name:'Hidden camera detector',        catId:'tech',      tab:'pack'},
-  {id:'i_jumpstart',  name:'Jump starter',                  catId:'tech',      tab:'pack', defaultPendingTask:'Charge things'},
-  {id:'i_tablet',     name:'Tablet',                        catId:'tech',      tab:'pack', defaultPendingTask:'Charge things'},
-  {id:'i_travelchg',  name:'Travel chargers',               catId:'tech',      tab:'pack'},
-  {id:'i_esk8',       name:'Electric skateboard & charger', catId:'tech',      tab:'pack', defaultPendingTask:'Charge things'},
-  {id:'i_extmon',     name:'External monitor + cables',     catId:'tech',      tab:'pack'},
-  {id:'i_powerstrip', name:'Power strip',                   catId:'tech',      tab:'pack'},
-  {id:'i_solar',      name:'Solar generator & charger',     catId:'tech',      tab:'pack', defaultPendingTask:'Charge things'},
-  // Hygiene
-  {id:'i_etoothbrush',name:'Electric toothbrush',           catId:'hygiene',   tab:'pack', defaultPendingTask:'Charge things'},
-  {id:'i_hygi',       name:'Hygiene items',                 catId:'hygiene',   tab:'pack'},
-  {id:'i_mouthguard', name:'Mouth guard',                   catId:'hygiene',   tab:'pack'},
-  {id:'i_sleepmask',  name:'Sleep mask',                    catId:'hygiene',   tab:'pack'},
-  {id:'i_waterpik',   name:'Waterpik',                      catId:'hygiene',   tab:'pack', defaultPendingTask:'Charge things'},
-  {id:'i_handsoap',   name:'Hand soap',                     catId:'hygiene',   tab:'pack'},
-  // Food
-  {id:'i_ag',         name:'Athletic Greens',               catId:'food',      tab:'pack'},
-  {id:'i_agbottle',   name:'Athletic Greens bottle',        catId:'food',      tab:'pack'},
-  {id:'i_coffeemug',  name:'Coffee mug',                    catId:'food',      tab:'pack'},
-  {id:'i_tillybrocoli',name:"Tilly's broccoli & cheese",   catId:'food',      tab:'pack'},
-  {id:'i_waterbottle',name:'Water bottle',                  catId:'food',      tab:'pack'},
-  {id:'i_waterbottlel',name:'Water bottle (large)',         catId:'food',      tab:'pack'},
-  {id:'i_freshfruit', name:'Fresh fruit',                   catId:'food',      tab:'pack'},
-  {id:'i_instcoffee', name:'Instant coffee',                catId:'food',      tab:'pack'},
-  {id:'i_oatcreamers',name:'Oat creamers',                  catId:'food',      tab:'pack'},
-  {id:'i_oregano',    name:'Oregano',                       catId:'food',      tab:'pack'},
-  {id:'i_spoonula',   name:'Spoonula',                      catId:'food',      tab:'pack'},
-  {id:'i_spork',      name:'Spork',                         catId:'food',      tab:'pack'},
-  {id:'i_waterheater',name:'Water heater',                  catId:'food',      tab:'pack'},
-  // Clothing
-  {id:'i_runninggear',name:'Running gear',                  catId:'clothing',  tab:'pack', subcatLabel:'Tops'},
-  {id:'i_tshirts',    name:'T-shirts',                      catId:'clothing',  tab:'pack', subcatLabel:'Tops'},
-  {id:'i_workclothes',name:'Work clothes',                  catId:'clothing',  tab:'pack', subcatLabel:'Tops'},
-  {id:'i_pajamap',    name:'Pajama pants',                  catId:'clothing',  tab:'pack', subcatLabel:'Bottoms'},
-  {id:'i_carhartt',   name:'Carhartt jacket',               catId:'clothing',  tab:'pack', subcatLabel:'Outerwear'},
-  {id:'i_downjacket', name:'Down jacket',                   catId:'clothing',  tab:'pack', subcatLabel:'Outerwear'},
-  {id:'i_downbooties',name:'Down booties',                  catId:'clothing',  tab:'pack', subcatLabel:'Footwear'},
-  {id:'i_heelies',    name:'Heelies',                       catId:'clothing',  tab:'pack', subcatLabel:'Footwear'},
-  {id:'i_runshoes',   name:'Running shoes',                 catId:'clothing',  tab:'pack', subcatLabel:'Footwear'},
-  {id:'i_workshoes',  name:'Work shoes',                    catId:'clothing',  tab:'pack', subcatLabel:'Footwear'},
-  {id:'i_showershoes',name:'Shower shoes',                  catId:'clothing',  tab:'pack', subcatLabel:'Footwear'},
-  {id:'i_gloves',     name:'Gloves',                        catId:'clothing',  tab:'pack', subcatLabel:'Essentials'},
-  {id:'i_keys',       name:'Keys',                          catId:'clothing',  tab:'pack', subcatLabel:'Essentials'},
-  {id:'i_phone',      name:'Phone',                         catId:'clothing',  tab:'pack', subcatLabel:'Essentials'},
-  {id:'i_socks',      name:'Socks',                         catId:'clothing',  tab:'pack', subcatLabel:'Essentials'},
-  {id:'i_sunglasses', name:'Sunglasses',                    catId:'clothing',  tab:'pack', subcatLabel:'Essentials'},
-  {id:'i_underwear',  name:'Underwear',                     catId:'clothing',  tab:'pack', subcatLabel:'Essentials'},
-  {id:'i_wallet',     name:'Wallet',                        catId:'clothing',  tab:'pack', subcatLabel:'Essentials'},
-  {id:'i_warmhat',    name:'Warm hat',                      catId:'clothing',  tab:'pack', subcatLabel:'Essentials'},
-  {id:'i_workbelt',   name:'Work belt',                     catId:'clothing',  tab:'pack', subcatLabel:'Essentials'},
-  {id:'i_socksundies',name:'Socks & underwear',             catId:'clothing',  tab:'pack', subcatLabel:'Essentials'},
-  {id:'i_clochange',  name:'Change of clothes (x2)',        catId:'clothing',  tab:'pack', subcatLabel:'Clothes'},
-  // Tilly
-  {id:'i_bowls',      name:'Bowls',                         catId:'tilly',     tab:'pack'},
-  {id:'i_bullysticks',name:'Bully sticks',                  catId:'tilly',     tab:'pack'},
-  {id:'i_dogbed',     name:'Dog bed',                       catId:'tilly',     tab:'pack'},
-  {id:'i_dogfood',    name:'Dog food',                      catId:'tilly',     tab:'pack'},
-  {id:'i_leash',      name:'Leash',                         catId:'tilly',     tab:'pack'},
-  {id:'i_toys',       name:'Toys',                          catId:'tilly',     tab:'pack'},
-  {id:'i_cheddar',    name:'Cheddar cheese',                catId:'tilly',     tab:'pack'},
-  // Household
-  {id:'i_foodbins',   name:'Food storage bins',             catId:'household', tab:'pack'},
-  {id:'i_lziplocks',  name:'Large ziplock bags',            catId:'household', tab:'pack'},
-  {id:'i_sziplocks',  name:'Small ziplock bags',            catId:'household', tab:'pack'},
-  {id:'i_trashbags',  name:'Trash bags',                    catId:'household', tab:'pack'},
-  {id:'i_wetwipes',   name:'Wet wipes',                     catId:'household', tab:'pack'},
-  {id:'i_collaptoilet',name:'Collapsing toilet',            catId:'household', tab:'pack'},
-  {id:'i_lblanket',   name:'Large electric blanket',        catId:'household', tab:'pack'},
-  {id:'i_papertowels',name:'Paper towels',                  catId:'household', tab:'pack'},
-  {id:'i_peebottle',  name:'Pee bottle',                    catId:'household', tab:'pack'},
-  {id:'i_pepgel',     name:'Pepper gel',                    catId:'household', tab:'pack'},
-  {id:'i_pillows',    name:'Pillows',                       catId:'household', tab:'pack'},
-  {id:'i_sblanket',   name:'Small electric blanket',        catId:'household', tab:'pack'},
-  {id:'i_slock',      name:'Small locker lock',             catId:'household', tab:'pack'},
-  {id:'i_toiletsup',  name:'Toilet supplies',               catId:'household', tab:'pack'},
-  {id:'i_toiletbin',  name:'Toilet waste bin',              catId:'household', tab:'pack'},
-  {id:'i_tools',      name:'Tools',                         catId:'household', tab:'pack'},
-  {id:'i_trashcan',   name:'Trash can',                     catId:'household', tab:'pack'},
-  {id:'i_strashbags', name:'Small trash bags',              catId:'household', tab:'pack'},
-  {id:'i_rwaterbottle',name:'Reusable water bottle',        catId:'bag',       tab:'pack'},
-  // Gym
-  {id:'i_yogamat',    name:'Yoga mat',                      catId:'gym',       tab:'pack', subcatLabel:'Yoga'},
-  {id:'i_yogablocks', name:'Yoga blocks',                   catId:'gym',       tab:'pack', subcatLabel:'Yoga'},
-  {id:'i_towel',      name:'Towel',                         catId:'gym',       tab:'pack', subcatLabel:'Shower'},
-  // Drone
-  {id:'i_dronebatt',  name:'Batteries & charger',           catId:'drone',     tab:'pack', defaultPendingTask:'Charge things'},
-  {id:'i_droneunit',  name:'Drone & spare parts',           catId:'drone',     tab:'pack'},
-  {id:'i_goggles',    name:'Goggles',                       catId:'drone',     tab:'pack', defaultPendingTask:'Charge things'},
-  {id:'i_controller', name:'Radio controller',              catId:'drone',     tab:'pack', defaultPendingTask:'Charge things'},
-  // Bag
-  {id:'i_pepgelb',    name:'Pepper gel',                    catId:'bag',       tab:'pack'},
+  // Box 1
+  {id:'i_powerStuff',  name:'Power Stuff',                   containerId:'c_box1',        tab:'pack', order:20},
+  {id:'i_towels',      name:'Towels',                        containerId:'c_box1',        tab:'pack', order:30},
+  {id:'i_lights',      name:'Lights',                        containerId:'c_box1',        tab:'pack', order:40},
+  // Box 2
+  {id:'i_stoveStuff',  name:'Stove Stuff',                   containerId:'c_box2',        tab:'pack', order:60},
+  {id:'i_bottlePot',   name:'Bottle/Pot',                    containerId:'c_box2',        tab:'pack', order:70},
+  {id:'i_foodContainer',name:'Food Container',               containerId:'c_box2',        tab:'pack', order:80},
+  {id:'i_thermos',     name:'Thermos',                       containerId:'c_box2',        tab:'pack', order:90},
+  {id:'i_coffeeMug',   name:'Coffee Mug',                    containerId:'c_box2',        tab:'pack', order:100},
+  {id:'i_ziplocBags',  name:'Ziploc Bags',                   containerId:'c_box2',        tab:'pack', order:110},
+  {id:'i_trashBags',   name:'Trash Bags',                    containerId:'c_box2',        tab:'pack', order:120},
+  {id:'i_wetWipes',    name:'Wet Wipes',                     containerId:'c_box2',        tab:'pack', order:130},
+  // Tilly's Stuff (sub-container of Box 2)
+  {id:'i_tillyFood',   name:'Food',                          containerId:'c_tillysStuff', tab:'pack', order:150},
+  {id:'i_chewySticks', name:'Chewy Sticks',                  containerId:'c_tillysStuff', tab:'pack', order:160},
+  {id:'i_bowls',       name:'Bowls',                         containerId:'c_tillysStuff', tab:'pack', order:170},
+  {id:'i_toys',        name:'Toys',                          containerId:'c_tillysStuff', tab:'pack', order:180},
+  {id:'i_leash',       name:'Leash',                         containerId:'c_tillysStuff', tab:'pack', order:190},
+  // Clothes Bag
+  {id:'i_tshirts',     name:'T-Shirts',                      containerId:'c_clothesBag',  tab:'pack', order:210},
+  {id:'i_workPants',   name:'Work Pants',                    containerId:'c_clothesBag',  tab:'pack', order:220},
+  {id:'i_workBelt',    name:'Work Belt',                     containerId:'c_clothesBag',  tab:'pack', order:230},
+  {id:'i_workShirts',  name:'Work Shirts',                   containerId:'c_clothesBag',  tab:'pack', order:240},
+  {id:'i_socks',       name:'Socks',                         containerId:'c_clothesBag',  tab:'pack', order:250},
+  {id:'i_underwear',   name:'Underwear',                     containerId:'c_clothesBag',  tab:'pack', order:260},
+  {id:'i_pajamaPants', name:'Pajama Pants',                  containerId:'c_clothesBag',  tab:'pack', order:270},
+  {id:'i_workShoes',   name:'Work Shoes',                    containerId:'c_clothesBag',  tab:'pack', order:280},
+  {id:'i_warmHat',     name:'Warm Hat',                      containerId:'c_clothesBag',  tab:'pack', order:290},
+  {id:'i_laundryBag',  name:'Laundry Bag',                   containerId:'c_clothesBag',  tab:'pack', order:300},
+  // Hygiene Bag
+  {id:'i_toothbrush',  name:'Toothbrush',                    containerId:'c_hygieneBag',  tab:'pack', order:320},
+  {id:'i_toothpaste',  name:'Toothpaste',                    containerId:'c_hygieneBag',  tab:'pack', order:330},
+  {id:'i_faceLotions', name:'Face Lotions',                  containerId:'c_hygieneBag',  tab:'pack', order:340},
+  {id:'i_handSoap',    name:'Hand Soap',                     containerId:'c_hygieneBag',  tab:'pack', order:350},
+  {id:'i_floss',       name:'Floss',                         containerId:'c_hygieneBag',  tab:'pack', order:360},
+  {id:'i_waterFlosser',name:'Water Flosser',                 containerId:'c_hygieneBag',  tab:'pack', order:370, defaultPendingTask:'Charge things'},
+  {id:'i_hygieneC',    name:'C',                             containerId:'c_hygieneBag',  tab:'pack', order:380},
+  // Large Stuff
+  {id:'i_desk',        name:'Desk',                          containerId:'c_largeStuff',  tab:'pack', order:400},
+  {id:'i_downStuff',   name:'Down Stuff',                    containerId:'c_largeStuff',  tab:'pack', order:410},
+  {id:'i_sleepingPad', name:'Sleeping Pad',                  containerId:'c_largeStuff',  tab:'pack', order:420},
+  {id:'i_cot',         name:'Cot',                           containerId:'c_largeStuff',  tab:'pack', order:430},
+  {id:'i_tent',        name:'Tent',                          containerId:'c_largeStuff',  tab:'pack', order:440},
+  {id:'i_vrStuff',     name:'VR Stuff',                      containerId:'c_largeStuff',  tab:'pack', order:450},
+  {id:'i_externalMonitor',name:'External Monitor',           containerId:'c_largeStuff',  tab:'pack', order:460},
+  {id:'i_bugExploder', name:'Bug Exploder',                  containerId:'c_largeStuff',  tab:'pack', order:470},
+  {id:'i_yogaMat',     name:'Yoga Mat',                      containerId:'c_largeStuff',  tab:'pack', order:480},
+  {id:'i_pillow',      name:'Pillow',                        containerId:'c_largeStuff',  tab:'pack', order:490},
+  {id:'i_toilet',      name:'Toilet',                        containerId:'c_largeStuff',  tab:'pack', order:500},
+  // Surf Bucket
+  {id:'i_pool',        name:'Pool',                          containerId:'c_surfBucket',  tab:'pack', order:520},
+  {id:'i_showerItem',  name:'Shower',                        containerId:'c_surfBucket',  tab:'pack', order:530},
+  {id:'i_sprayer',     name:'Sprayer',                       containerId:'c_surfBucket',  tab:'pack', order:540},
+  {id:'i_secretStorage',name:'Storage for that of which we do not speak', containerId:'c_surfBucket', tab:'pack', order:550},
+  {id:'i_peeBottle',   name:'Pee Bottle',                    containerId:'c_surfBucket',  tab:'pack', order:560},
+  {id:'i_waters',      name:'Waters',                        containerId:'c_surfBucket',  tab:'pack', order:570},
+  {id:'i_beachTowel',  name:'Beach Towel',                   containerId:'c_surfBucket',  tab:'pack', order:580},
+  // Backpack
+  {id:'i_workComputer',name:'Work Computer',                 containerId:'c_backpack',    tab:'pack', order:600},
+  {id:'i_kbMouse',     name:'Keyboard & Mouse',               containerId:'c_backpack',    tab:'pack', order:610},
+  {id:'i_workBadge',   name:'Work Badge',                    containerId:'c_backpack',    tab:'pack', order:620},
+  {id:'i_headphonesAfter',  name:'Headphones (Aftershokz)',   containerId:'c_backpack',    tab:'pack', order:630, defaultPendingTask:'Charge things'},
+  {id:'i_headphonesEarbuds',name:'Headphones (Earbuds)',      containerId:'c_backpack',    tab:'pack', order:640, defaultPendingTask:'Charge things'},
+  {id:'i_headphonesOther',  name:'Headphones (Other Earbuds)',containerId:'c_backpack',    tab:'pack', order:650, defaultPendingTask:'Charge things'},
+  {id:'i_backpackWaterBottle',name:'Water Bottle',           containerId:'c_backpack',    tab:'pack', order:660},
+  // Charger Bag
+  {id:'i_powerStrip',  name:'Power Strip',                   containerId:'c_chargerBag',  tab:'pack', order:680},
+  {id:'i_usbcConnectors',name:'USB-C Connectors',             containerId:'c_chargerBag',  tab:'pack', order:690},
+  {id:'i_kbMouseAdapters',name:'Keyboard/Mouse Adapters',     containerId:'c_chargerBag',  tab:'pack', order:700},
+  {id:'i_extMonitorCables',name:'External Monitor Cables',    containerId:'c_chargerBag',  tab:'pack', order:710},
+  // Car
+  {id:'i_carSecurity', name:'Car Security Devices',          containerId:'c_car',         tab:'pack', order:730},
+  {id:'i_jumpStarter', name:'Jump Starter',                  containerId:'c_car',         tab:'pack', order:740, defaultPendingTask:'Charge things'},
+  {id:'i_paperTowels', name:'Paper Towels',                  containerId:'c_car',         tab:'pack', order:750},
+  // Fanny Pack (sub-container of Car)
+  {id:'i_lighter',     name:'Lighter',                       containerId:'c_fannyPack',   tab:'pack', order:770},
+  {id:'i_ereader',     name:'E-Reader',                      containerId:'c_fannyPack',   tab:'pack', order:780},
+  {id:'i_spork',       name:'Spork',                         containerId:'c_fannyPack',   tab:'pack', order:790},
+  {id:'i_headlamp',    name:'Headlamp',                      containerId:'c_fannyPack',   tab:'pack', order:800},
+  // Me
+  {id:'i_keys',        name:'Keys',                          containerId:'c_me',          tab:'pack', order:820},
+  {id:'i_wallet',      name:'Wallet',                        containerId:'c_me',          tab:'pack', order:830},
+  {id:'i_phone',       name:'Phone',                         containerId:'c_me',          tab:'pack', order:840},
+  {id:'i_sunglasses',  name:'Sunglasses',                    containerId:'c_me',          tab:'pack', order:850},
+  {id:'i_fieldy',      name:'Fieldy',                        containerId:'c_me',          tab:'pack', order:860, defaultPendingTask:'Charge things'},
+  {id:'i_gloves',      name:'Gloves',                        containerId:'c_me',          tab:'pack', order:870},
   // Todo
   {id:'t_drainsnake', name:'Buy drain snake (Walmart)',     catId:'shopping',  tab:'todo'},
   {id:'t_instcoffee', name:'Buy instant coffee (Walmart)',  catId:'shopping',  tab:'todo'},
@@ -727,13 +744,15 @@ let MASTER_ITEMS = [
 const TRIP_DEFAULTS = {
   salem: {
     name: 'Salem Trip',
-    pack: ['i_compAcc','i_badge','i_laptop','i_carSec','i_fieldy','i_headphones','i_hidcam','i_jumpstart','i_tablet','i_travelchg','i_etoothbrush','i_hygi','i_mouthguard','i_sleepmask','i_waterpik','i_ag','i_agbottle','i_coffeemug','i_tillybrocoli','i_waterbottle','i_runninggear','i_tshirts','i_workclothes','i_pajamap','i_carhartt','i_heelies','i_runshoes','i_workshoes','i_gloves','i_keys','i_phone','i_socks','i_sunglasses','i_underwear','i_wallet','i_warmhat','i_workbelt','i_bowls','i_bullysticks','i_dogbed','i_dogfood','i_leash','i_toys','i_foodbins','i_lziplocks','i_sziplocks','i_trashbags','i_wetwipes','i_towel'],
-    defaultDayof: ['i_fieldy','i_etoothbrush','i_mouthguard','i_sleepmask','i_coffeemug','i_tillybrocoli','i_gloves','i_runshoes','i_keys','i_phone','i_sunglasses','i_tablet'],
+    // Pack list reset (2026-07-16): old item ids retired, pack starts empty —
+    // repopulate per-trip from the pool.
+    pack: [],
+    defaultDayof: [],
     todo: ['t_drainsnake','t_padlock','t_vacuum','t_cleansync','t_shave'],
   },
   birthday: {
     name: 'Birthday Trip',
-    pack: ['i_esk8','i_headphones','i_phone','i_travelchg','i_dronebatt','i_droneunit','i_goggles','i_controller','i_etoothbrush','i_handsoap','i_hygi','i_mouthguard','i_sleepmask','i_towel','i_clochange','i_pajamap','i_heelies','i_showershoes','i_carhartt','i_keys','i_socksundies','i_sunglasses','i_wallet','i_bowls','i_bullysticks','i_cheddar','i_dogbed','i_dogfood','i_leash','i_toys','i_lziplocks','i_pepgel','i_rwaterbottle','i_sblanket','i_strashbags','i_sziplocks','i_wetwipes'],
+    pack: [],
     todo: ['t_drainsnake','t_instcoffee','t_lziplock','t_padlock','t_powerstrip','t_sheets','t_laundry','t_vacuum','t_packvan','t_cleansync','t_shave','t_shower','t_tillybath'],
   }
 };
@@ -836,6 +855,16 @@ function saveMasterCats() {
     syncMasterCatsToSupabase();
   } catch(e){}
 }
+function getMasterContainers() {
+  try { const v=localStorage.getItem('masterContainers'); return v?JSON.parse(v):null; } catch(e){return null;}
+}
+function saveMasterContainers() {
+  try {
+    localStorage.setItem('masterContainers', JSON.stringify(MASTER_CONTAINERS));
+    logChange('__library__', 'masterContainers', MASTER_CONTAINERS);
+    syncMasterContainersToSupabase();
+  } catch(e){}
+}
 
 function getActiveIds(trip, tab) {
   const def = TRIP_DEFAULTS[trip]?.[tab] || [];
@@ -855,6 +884,52 @@ function getItem(id) { return MASTER_ITEMS.find(i=>i.id===id); }
 function getCat(id) { return MASTER_CATS[id] || Object.values(MASTER_CATS).find(c=>c.id===id); }
 function itemsForTab(tab) { return MASTER_ITEMS.filter(i=>i.tab===tab); }
 function allCatIds(tab) { return [...new Set(itemsForTab(tab).map(i=>i.catId))]; }
+
+// ═══════════════════════════════════
+// CONTAINER TREE HELPERS (pack tab)
+// ═══════════════════════════════════
+function ensureLooseContainer() {
+  if (!MASTER_CONTAINERS.some(c=>c.id==='c_loose')) {
+    MASTER_CONTAINERS.unshift({ id:'c_loose', name:'Loose', icon:'🧳', parentId:null, order:0 });
+  }
+}
+function getContainer(id) { return MASTER_CONTAINERS.find(c=>c.id===id); }
+function getItemContainerId(item) { return item.containerId || 'c_loose'; }
+function containerChildren(parentId) {
+  return MASTER_CONTAINERS.filter(c=>c.parentId===parentId).sort((a,b)=>a.order-b.order);
+}
+function itemsInContainer(containerId, tab='pack') {
+  return itemsForTab(tab).filter(i=>getItemContainerId(i)===containerId);
+}
+// All leaf item ids anywhere in containerId's subtree (containerId included).
+function collectLeafIds(containerId) {
+  const ids = itemsInContainer(containerId).map(i=>i.id);
+  containerChildren(containerId).forEach(c => ids.push(...collectLeafIds(c.id)));
+  return ids;
+}
+// Breadcrumb string like "Box 2 › Tilly's Stuff".
+function getContainerPath(containerId) {
+  const path = [];
+  let c = getContainer(containerId);
+  while (c) { path.unshift(c.name); c = c.parentId ? getContainer(c.parentId) : null; }
+  return path.join(' › ');
+}
+// Depth-first flattening of the whole tree, for building indented <select> options.
+function flattenContainerTree(parentId=null, depth=0) {
+  const out = [];
+  containerChildren(parentId).forEach(c => {
+    out.push({ container:c, depth });
+    out.push(...flattenContainerTree(c.id, depth+1));
+  });
+  return out;
+}
+// Generic "what group is this item in" / "what's that group called" helpers that work
+// across both the pack tab (container tree) and todo tab (flat categories) — used by
+// the edit log / diff view, which doesn't otherwise care which kind of grouping it is.
+function getGroupId(item) { return item.tab === 'pack' ? getItemContainerId(item) : item.catId; }
+function groupTitle(tab, groupId) {
+  return tab === 'pack' ? (getContainerPath(groupId) || groupId) : (getCat(groupId)?.title || groupId);
+}
 
 // ═══════════════════════════════════
 // TRIP UI
@@ -879,19 +954,25 @@ function switchTab(name, btn) {
 function renderAll() { renderTab('pack'); renderTab('todo'); }
 
 function renderTab(tab) {
+  if (tab === 'pack') { renderPackTab(); return; }
+  renderTodoTab();
+}
+
+function renderTodoTab() {
+  const tab = 'todo';
   const activeIds = new Set(getActiveIds(currentTrip, tab));
   const checked = gs(currentTrip, tab+'Checked', {});
   const customDayof = new Set(gs(currentTrip, tab+'Dayof', []));
   const builtinDayof = new Set(TRIP_DEFAULTS[currentTrip]?.defaultDayof || []);
   const dayof = new Set([...builtinDayof, ...customDayof]);
-  const pending = tab === 'pack' ? getPending(currentTrip) : {};
+  const pending = {};
 
   // Active items grouped by cat
-  const gridEl = document.getElementById(tab===('pack')?'pack-grid':'todo-grid');
+  const gridEl = document.getElementById('todo-grid');
   gridEl.innerHTML = '';
 
   const catOrder = allCatIds(tab).filter(cid => itemsForTab(tab).some(i=>i.catId===cid && activeIds.has(i.id)));
-  
+
   catOrder.forEach(catId => {
     const cat = getCat(catId);
     if (!cat) return;
@@ -899,11 +980,11 @@ function renderTab(tab) {
     if (!catItems.length) return;
 
     const section = document.createElement('div');
-    section.className = tab==='pack' ? 'category' : 'section';
+    section.className = 'section';
 
     const header = document.createElement('div');
-    header.className = tab==='pack' ? 'category-header' : 'section-header';
-    header.innerHTML = `<span class="${tab==='pack'?'cat-icon':'sec-icon'}">${cat.icon}</span><span class="${tab==='pack'?'cat-title':'sec-title'}">${cat.title}</span><span class="${tab==='pack'?'cat-count':'sec-count'}" id="cnt-${tab}-${catId}"></span>`;
+    header.className = 'section-header';
+    header.innerHTML = `<span class="sec-icon">${cat.icon}</span><span class="sec-title">${cat.title}</span><span class="sec-count" id="cnt-${tab}-${catId}"></span>`;
     const addBtn = document.createElement('button');
     addBtn.className = 'add-btn'; addBtn.textContent = '+';
     addBtn.onclick = () => showAddRow(tab, catId);
@@ -948,7 +1029,107 @@ function renderTab(tab) {
   });
 
   updateProgress(tab);
+}
+
+// ═══════════════════════════════════
+// PACK TAB — container tree render
+// ═══════════════════════════════════
+function renderPackTab() {
+  const tab = 'pack';
+  const activeIds = new Set(getActiveIds(currentTrip, tab));
+  const checked = gs(currentTrip, 'packChecked', {});
+  const customDayof = new Set(gs(currentTrip, 'packDayof', []));
+  const builtinDayof = new Set(TRIP_DEFAULTS[currentTrip]?.defaultDayof || []);
+  const dayof = new Set([...builtinDayof, ...customDayof]);
+  const pending = getPending(currentTrip);
+
+  const gridEl = document.getElementById('pack-grid');
+  gridEl.innerHTML = '';
+
+  containerChildren(null).forEach(container => {
+    const node = buildContainerNode(container, 0, activeIds, checked, dayof, pending);
+    if (node) gridEl.appendChild(node);
+  });
+
+  updateProgress(tab);
   renderPool(tab);
+}
+
+// Aggregate checkbox state for a container from its active leaf descendants.
+function containerCheckState(activeLeafIds, checked) {
+  if (!activeLeafIds.length) return 'unchecked';
+  const checkedCount = activeLeafIds.filter(id => checked[id]).length;
+  if (checkedCount === 0) return 'unchecked';
+  if (checkedCount === activeLeafIds.length) return 'checked';
+  return 'indeterminate';
+}
+
+// Checks/unchecks every active leaf item under a container in one write.
+function toggleContainer(containerId, activeLeafIds) {
+  const checked = gs(currentTrip, 'packChecked', {});
+  const state = containerCheckState(activeLeafIds, checked);
+  const makeChecked = state !== 'checked';
+  activeLeafIds.forEach(id => { if (makeChecked) checked[id] = true; else delete checked[id]; });
+  ss(currentTrip, 'packChecked', checked);
+  renderTab('pack');
+}
+
+function buildContainerNode(container, depth, activeIds, checked, dayof, pending) {
+  const leafIds = collectLeafIds(container.id);
+  const activeLeafIds = leafIds.filter(id => activeIds.has(id));
+  if (!activeLeafIds.length) return null;
+
+  const wrap = document.createElement('div');
+  wrap.className = `category container-node depth-${depth}`;
+
+  const state = containerCheckState(activeLeafIds, checked);
+  const header = document.createElement('div');
+  header.className = 'category-header container-header';
+  header.innerHTML = `<span class="cb container-cb${state==='checked'?' checked':''}${state==='indeterminate'?' indeterminate':''}"></span><span class="cat-icon">${container.icon||'📁'}</span><span class="cat-title">${container.name}</span><span class="cat-count" id="cnt-pack-${container.id}"></span>`;
+  header.querySelector('.container-cb').onclick = e => { e.stopPropagation(); toggleContainer(container.id, activeLeafIds); };
+  const addBtn = document.createElement('button');
+  addBtn.className = 'add-btn'; addBtn.textContent = '+';
+  addBtn.onclick = () => showAddRow('pack', container.id);
+  header.appendChild(addBtn);
+  wrap.appendChild(header);
+
+  const ul = document.createElement('ul');
+  ul.id = `ul-pack-${container.id}`;
+
+  const childItems = itemsInContainer(container.id).map(i => ({ type:'item', node:i, order:i.order||0 }));
+  const childContainers = containerChildren(container.id).map(c => ({ type:'container', node:c, order:c.order }));
+  [...childItems, ...childContainers].sort((a,b)=>a.order-b.order).forEach(child => {
+    if (child.type === 'item') {
+      if (activeIds.has(child.node.id)) ul.appendChild(buildActiveLi(child.node, 'pack', checked, dayof, pending));
+    } else {
+      const subNode = buildContainerNode(child.node, depth+1, activeIds, checked, dayof, pending);
+      if (subNode) {
+        const li = document.createElement('li');
+        li.className = 'container-li';
+        li.appendChild(subNode);
+        ul.appendChild(li);
+      }
+    }
+  });
+
+  const addRow = document.createElement('div');
+  addRow.className = 'add-row'; addRow.id = `addrow-pack-${container.id}`;
+  addRow.innerHTML = `<input class="add-input" id="addinput-pack-${container.id}" placeholder="New item…" autocomplete="off"><button class="add-confirm">Add</button><button class="add-cancel">✕</button><div class="add-suggestions" id="addsugg-pack-${container.id}"></div>`;
+  addRow.querySelector('.add-confirm').onclick = () => confirmAdd('pack', container.id);
+  addRow.querySelector('.add-cancel').onclick  = () => hideAddRow('pack', container.id);
+  const addInp = addRow.querySelector('.add-input');
+  addInp.oninput  = () => _updateAddSuggestions(addInp, 'pack', container.id);
+  addInp.onblur   = () => { setTimeout(() => { const s = document.getElementById(`addsugg-pack-${container.id}`); if(s) s.classList.remove('visible'); }, 150); };
+  addInp.onkeydown = e => {
+    if (e.key==='ArrowDown') { e.preventDefault(); _moveAddSugg('pack', container.id, 1); return; }
+    if (e.key==='ArrowUp')   { e.preventDefault(); _moveAddSugg('pack', container.id, -1); return; }
+    if (e.key==='Enter')     { if (!_selectAddSugg('pack', container.id)) confirmAdd('pack', container.id); return; }
+    if (e.key==='Escape')    { hideAddRow('pack', container.id); }
+  };
+
+  wrap.appendChild(ul);
+  wrap.appendChild(addRow);
+  return wrap;
 }
 
 function buildActiveLi(item, tab, checked, dayof, pending) {
@@ -987,19 +1168,24 @@ function renderPool(tab) {
   if (!poolItems.length) { poolSection.style.display='none'; return; }
   poolSection.style.display='block';
 
-  // Group by cat
-  const catIds = [...new Set(poolItems.map(i=>i.catId))];
-  catIds.forEach(catId => {
-    const cat = getCat(catId);
-    if (!cat) return;
-    const items = poolItems.filter(i=>i.catId===catId);
+  // Group by container (pack) or cat (todo)
+  const groupIds = tab === 'pack'
+    ? [...new Set(poolItems.map(i=>getItemContainerId(i)))]
+    : [...new Set(poolItems.map(i=>i.catId))];
+  groupIds.forEach(groupId => {
+    const icon = tab === 'pack' ? (getContainer(groupId)?.icon||'📁') : getCat(groupId)?.icon;
+    const title = tab === 'pack' ? getContainerPath(groupId) : getCat(groupId)?.title;
+    if (title == null) return;
+    const items = tab === 'pack'
+      ? poolItems.filter(i=>getItemContainerId(i)===groupId)
+      : poolItems.filter(i=>i.catId===groupId);
 
     const catEl = document.createElement('div');
     catEl.className = 'pool-cat';
 
     const hdr = document.createElement('div');
     hdr.className = 'pool-cat-header';
-    hdr.innerHTML = `<span class="pool-cat-icon">${cat.icon}</span><span class="pool-cat-title">${cat.title}</span>`;
+    hdr.innerHTML = `<span class="pool-cat-icon">${icon||''}</span><span class="pool-cat-title">${title}</span>`;
     catEl.appendChild(hdr);
 
     const ul = document.createElement('ul');
@@ -1035,7 +1221,7 @@ function attachPoolCtx(li, item, tab) {
       <div class="ctx-item" id="cpm-edit">✏️ <u>E</u>dit item info</div>
     `;
     const addFn  = () => { addItemToTrip(item.id, tab); closeCtxMenu(); };
-    const editFn = () => { closeCtxMenu(); openEditModal(item, tab, item.catId); };
+    const editFn = () => { closeCtxMenu(); openEditModal(item, tab, tab==='pack' ? getItemContainerId(item) : item.catId); };
     menu.querySelector('#cpm-add').onclick  = addFn;
     menu.querySelector('#cpm-edit').onclick = editFn;
     positionMenu(menu, e);
@@ -1055,6 +1241,7 @@ function toggleItem(itemId, tab) {
   const checked = gs(currentTrip, tab+'Checked', {});
   if (checked[itemId]) delete checked[itemId]; else checked[itemId] = true;
   ss(currentTrip, tab+'Checked', checked);
+  if (tab === 'pack') { renderTab('pack'); return; } // container checkboxes need their aggregate state recomputed
   updateProgress(tab);
   // Just update the li state without full re-render
   const item = getItem(itemId);
@@ -1137,7 +1324,7 @@ function attachItemCtx(li, item, tab) {
       closeCtxMenu();
     };
     const toggleFn  = () => { toggleItem(item.id, tab); closeCtxMenu(); };
-    const editFn    = () => { closeCtxMenu(); openEditModal(item, tab, item.catId); };
+    const editFn    = () => { closeCtxMenu(); openEditModal(item, tab, getItemContainerId(item)); };
     const removeFn  = () => { removeItemFromTrip(item.id, tab); closeCtxMenu(); };
     const todoFn    = () => { closeCtxMenu(); openSuggestModal(item); };
     const pendingFn = isPending
@@ -1395,18 +1582,38 @@ function attachTodoCtx(li, item) {
   li.addEventListener('touchend', ()=>clearTimeout(pressTimer));
   li.addEventListener('touchmove', ()=>clearTimeout(pressTimer));
 }
-function openEditModal(item, tab, catId) {
-  editState = { item, tab, catId };
+// `groupId` is a containerId (pack tab) or catId (todo tab).
+function openEditModal(item, tab, groupId) {
+  editState = { item, tab, groupId };
   document.getElementById('edit-item-name').value = item.name;
 
+  document.getElementById('edit-item-cat-label').textContent = tab === 'pack' ? 'Container' : 'Category';
+  document.getElementById('edit-new-cat-label').textContent = tab === 'pack' ? 'New Container Name' : 'New Category Name';
+  document.getElementById('edit-new-cat').placeholder = tab === 'pack' ? 'e.g. Cooler' : 'e.g. Electronics';
+
   const catSel = document.getElementById('edit-item-cat');
-  const cats = Object.values(MASTER_CATS).filter(c=>c.tab===tab);
-  catSel.innerHTML = cats.map(c=>`<option value="${c.id}"${c.id===catId?' selected':''}>${c.icon} ${c.title}</option>`).join('');
-  catSel.innerHTML += `<option value="__new__">+ New category…</option>`;
+  const parentRow = document.getElementById('new-container-parent-row');
+  const parentSel = document.getElementById('edit-new-container-parent');
+
+  if (tab === 'pack') {
+    const flat = flattenContainerTree();
+    const optionHtml = ({container,depth}) =>
+      `<option value="${container.id}"${container.id===groupId?' selected':''}>${'— '.repeat(depth)}${container.icon||'📁'} ${container.name}</option>`;
+    catSel.innerHTML = flat.map(optionHtml).join('');
+    parentSel.innerHTML = `<option value="">— (top level) —</option>` + flat.map(optionHtml).join('');
+  } else {
+    const cats = Object.values(MASTER_CATS).filter(c=>c.tab===tab);
+    catSel.innerHTML = cats.map(c=>`<option value="${c.id}"${c.id===groupId?' selected':''}>${c.icon} ${c.title}</option>`).join('');
+  }
+  catSel.innerHTML += `<option value="__new__">+ New ${tab==='pack'?'container':'category'}…</option>`;
+
   catSel.onchange = () => {
-    document.getElementById('new-cat-field').style.display = catSel.value==='__new__' ? 'block' : 'none';
+    const isNew = catSel.value === '__new__';
+    document.getElementById('new-cat-field').style.display = isNew ? 'block' : 'none';
+    parentRow.style.display = (isNew && tab==='pack') ? 'block' : 'none';
   };
   document.getElementById('new-cat-field').style.display = 'none';
+  parentRow.style.display = 'none';
 
   const dpField = document.getElementById('edit-item-defaultpending-field');
   if (tab === 'pack') {
@@ -1423,24 +1630,32 @@ function openEditModal(item, tab, catId) {
 function saveItemEdit() {
   const newName = document.getElementById('edit-item-name').value.trim();
   if (!newName) return;
+  const tab = editState.tab;
   const catSel = document.getElementById('edit-item-cat');
-  let newCatId = catSel.value;
+  let newGroupId = catSel.value;
 
-  if (newCatId === '__new__') {
-    const newCatName = document.getElementById('edit-new-cat').value.trim();
-    if (!newCatName) return;
-    newCatId = 'cat_'+Date.now();
-    MASTER_CATS[newCatId] = { id:newCatId, icon:'📌', title:newCatName, tab:editState.tab };
-    saveMasterCats();
+  if (newGroupId === '__new__') {
+    const newGroupName = document.getElementById('edit-new-cat').value.trim();
+    if (!newGroupName) return;
+    if (tab === 'pack') {
+      const parentId = document.getElementById('edit-new-container-parent').value || null;
+      newGroupId = 'c_'+Date.now();
+      MASTER_CONTAINERS.push({ id:newGroupId, name:newGroupName, icon:'📁', parentId, order:Date.now() });
+      saveMasterContainers();
+    } else {
+      newGroupId = 'cat_'+Date.now();
+      MASTER_CATS[newGroupId] = { id:newGroupId, icon:'📌', title:newGroupName, tab };
+      saveMasterCats();
+    }
   }
 
   // Update name globally across all items with same id
   const item = MASTER_ITEMS.find(i=>i.id===editState.item.id);
   if (item) {
     // Log the edit before applying it
-    logEdit({ id: item.id, oldName: item.name, newName, oldCatId: item.catId, newCatId, tab: item.tab });
+    logEdit({ id: item.id, oldName: item.name, newName, oldCatId: getGroupId(item), newCatId: newGroupId, tab: item.tab });
     item.name = newName;
-    item.catId = newCatId;
+    if (tab === 'pack') item.containerId = newGroupId; else item.catId = newGroupId;
   }
   saveMasterItems();
   closeAllModals();
@@ -1457,7 +1672,7 @@ function permanentlyDeleteItem() {
   const item = editState.item;
   // Log deletion before removing
   const deleted = gs('__meta__', 'permanentlyDeleted', []);
-  deleted.push({ id: item.id, name: item.name, catId: item.catId, tab: item.tab, deletedAt: Date.now() });
+  deleted.push({ id: item.id, name: item.name, catId: item.catId, containerId: item.containerId, tab: item.tab, deletedAt: Date.now() });
   ss('__meta__', 'permanentlyDeleted', deleted);
 
   MASTER_ITEMS = MASTER_ITEMS.filter(i=>i.id!==item.id);
@@ -1489,7 +1704,22 @@ function updateProgress(tab) {
   document.getElementById(`${tab}-bar`).style.width = total?(done/total*100)+'%':'0%';
   document.getElementById(`${tab}-all-done`).style.display = done===total&&total>0?'block':'none';
 
-  // Per-cat counts
+  if (tab === 'pack') {
+    let containerCount = 0;
+    MASTER_CONTAINERS.forEach(container => {
+      const leafIds = collectLeafIds(container.id).filter(id=>activeIds.has(id));
+      if (leafIds.length) containerCount++;
+      const el = document.getElementById(`cnt-pack-${container.id}`);
+      if (!el) return;
+      const t = leafIds.length, d = leafIds.filter(id=>checked[id]).length;
+      el.textContent = d>0?`${d}/${t}`:'';
+      el.style.color = d===t&&d>0?'var(--green)':'var(--muted)';
+    });
+    document.getElementById('pack-footer').textContent = `${total} items · ${containerCount} containers`;
+    return;
+  }
+
+  // Per-cat counts (todo)
   allCatIds(tab).forEach(catId => {
     const el = document.getElementById(`cnt-${tab}-${catId}`);
     if (!el) return;
@@ -1499,9 +1729,8 @@ function updateProgress(tab) {
     el.style.color = d===t&&d>0?'var(--green)':'var(--muted)';
   });
 
-  const label = tab==='pack'?'items':'tasks';
   const catCount = allCatIds(tab).filter(cid=>itemsForTab(tab).some(i=>i.catId===cid&&activeIds.has(i.id))).length;
-  document.getElementById(`${tab}-footer`).textContent = `${total} ${label} · ${catCount} categories`;
+  document.getElementById(`${tab}-footer`).textContent = `${total} tasks · ${catCount} categories`;
 }
 
 function resetTab(tab) {
@@ -1523,7 +1752,7 @@ function createTrip() {
   const id = 'trip_'+Date.now();
   ss(id,'name',name);
   // Start with essentials active
-  const packStarter = ['i_keys','i_phone','i_wallet','i_etoothbrush','i_hygi'];
+  const packStarter = ['i_keys','i_phone','i_wallet','i_toothbrush','i_toothpaste'];
   const todoStarter = ['t_sheets','t_laundry','t_vacuum','t_packvan','t_shave','t_shower','t_tillybath'];
   setActiveIds(id,'pack',packStarter);
   setActiveIds(id,'todo',todoStarter);
@@ -1549,35 +1778,36 @@ function buildDiff() {
 
     [...activeIds].filter(id=>!defaultIds.has(id)).forEach(id=>{
       const item=getItem(id); if(!item)return;
-      const cat=getCat(item.catId);
-      diff.changes.push({type:'added',tab,cat:cat?.title||item.catId,catId:item.catId,item:item.name});
+      const gid = getGroupId(item);
+      diff.changes.push({type:'added',tab,cat:groupTitle(tab,gid),catId:gid,item:item.name});
     });
     [...defaultIds].filter(id=>!activeIds.has(id)).forEach(id=>{
       const item=getItem(id); if(!item)return;
-      const cat=getCat(item.catId);
-      diff.changes.push({type:'removed',tab,cat:cat?.title||item.catId,catId:item.catId,item:item.name});
+      const gid = getGroupId(item);
+      diff.changes.push({type:'removed',tab,cat:groupTitle(tab,gid),catId:gid,item:item.name});
     });
     Object.keys(checked).forEach(id=>{
       const item=getItem(id); if(!item)return;
-      const cat=getCat(item.catId);
-      diff.changes.push({type:'checked',tab,cat:cat?.title||item.catId,catId:item.catId,item:item.name});
+      const gid = getGroupId(item);
+      diff.changes.push({type:'checked',tab,cat:groupTitle(tab,gid),catId:gid,item:item.name});
     });
     [...customDayof].filter(id=>!builtinDayof.has(id)).forEach(id=>{
       const item=getItem(id); if(!item)return;
-      const cat=getCat(item.catId);
-      diff.changes.push({type:'dayof',tab,cat:cat?.title||item.catId,catId:item.catId,item:item.name});
+      const gid = getGroupId(item);
+      diff.changes.push({type:'dayof',tab,cat:groupTitle(tab,gid),catId:gid,item:item.name});
     });
     [...builtinDayof].filter(id=>removedDayof.has(id)).forEach(id=>{
       const item=getItem(id); if(!item)return;
-      const cat=getCat(item.catId);
-      diff.changes.push({type:'dayof_removed',tab,cat:cat?.title||item.catId,catId:item.catId,item:item.name});
+      const gid = getGroupId(item);
+      diff.changes.push({type:'dayof_removed',tab,cat:groupTitle(tab,gid),catId:gid,item:item.name});
     });
   });
 
   // Permanently deleted items
   const deleted = gs('__meta__', 'permanentlyDeleted', []);
   deleted.forEach(item=>{
-    diff.changes.push({type:'deleted',tab:item.tab,cat:item.catId,catId:item.catId,item:item.name});
+    const gid = getGroupId(item);
+    diff.changes.push({type:'deleted',tab:item.tab,cat:groupTitle(item.tab,gid),catId:gid,item:item.name});
   });
 
   // Explicit name/category edits
@@ -1588,12 +1818,12 @@ function buildDiff() {
       const dedup = `${e.id}:${e.newName}:${e.newCatId}`;
       if (seen.has(dedup)) return;
       seen.add(dedup);
-      const newCat = getCat(e.newCatId);
-      const oldCat = getCat(e.oldCatId);
+      const newTitle = groupTitle(e.tab, e.newCatId);
+      const oldTitle = groupTitle(e.tab, e.oldCatId);
       let desc = `"${e.oldName}"`;
       if (e.oldName !== e.newName) desc += ` → "${e.newName}"`;
-      if (e.oldCatId !== e.newCatId) desc += ` (${oldCat?.title||e.oldCatId} → ${newCat?.title||e.newCatId})`;
-      diff.changes.push({ type:'edited', tab: e.tab, cat: newCat?.title||e.newCatId, catId: e.newCatId, item: desc });
+      if (e.oldCatId !== e.newCatId) desc += ` (${oldTitle} → ${newTitle})`;
+      diff.changes.push({ type:'edited', tab: e.tab, cat: newTitle, catId: e.newCatId, item: desc });
     });
   } catch(err) {}
 
@@ -1620,15 +1850,15 @@ function buildDiff() {
           // Item was in log snapshot but deleted since — already caught by deleted log
           return;
         }
-        if (current.name !== logItem.name || current.catId !== logItem.catId) {
-          // Name or cat changed between this log entry and current state
-          const cat = getCat(current.catId);
-          const dedup = `edit:${current.id}:${current.name}:${current.catId}`;
+        const curGid = getGroupId(current), logGid = getGroupId(logItem);
+        if (current.name !== logItem.name || curGid !== logGid) {
+          // Name or group changed between this log entry and current state
+          const dedup = `edit:${current.id}:${current.name}:${curGid}`;
           if (!seenItems.has(dedup)) {
             seenItems.add(dedup);
             diff.changes.push({
-              type:'raw', tab: current.tab, cat: cat?.title||current.catId, catId: current.catId,
-              item: `Renamed/moved: "${logItem.name}" → "${current.name}"${logItem.catId!==current.catId?' (cat changed)':''}`
+              type:'raw', tab: current.tab, cat: groupTitle(current.tab, curGid), catId: curGid,
+              item: `Renamed/moved: "${logItem.name}" → "${current.name}"${logGid!==curGid?' (group changed)':''}`
             });
           }
         }
@@ -1713,17 +1943,20 @@ function buildAIContext() {
   });
 
   return {
-    _instructions: `You are helping modify a personal trip packing list app. The user is currently viewing the trip: "${getTripName(currentTrip)}" (id: "${currentTrip}"). When the user says "my list", "this trip", or refers to a trip without naming it, assume they mean this one. 'items' is the master library — each item has an id, name, catId, tab (pack|todo), and optional subcatLabel. Each trip has packActive/todoActive arrays of item IDs currently on that list, packDayof for items flagged to pack the morning of departure, and packChecked/todoChecked arrays of item IDs already packed/done. Use the ops in _patch_spec to express any changes the user requests. IMPORTANT: always reference items by their existing id — only use add_item for genuinely new items. Return ONLY a valid patch JSON object (spec + version + ops array), no explanation or markdown.`,
+    _instructions: `You are helping modify a personal trip packing list app. The user is currently viewing the trip: "${getTripName(currentTrip)}" (id: "${currentTrip}"). When the user says "my list", "this trip", or refers to a trip without naming it, assume they mean this one. 'items' is the master library — each item has an id, name, tab (pack|todo). Pack items use 'containerId' pointing into 'containers' (a tree via parentId — null/omitted parentId means top-level; 'c_loose' is the fallback container for uncontained items). Todo items use 'catId' pointing into 'categories' (flat, no nesting). Each trip has packActive/todoActive arrays of item IDs currently on that list, packDayof for items flagged to pack the morning of departure, and packChecked/todoChecked arrays of item IDs already packed/done. Use the ops in _patch_spec to express any changes the user requests. IMPORTANT: always reference items by their existing id — only use add_item for genuinely new items. Return ONLY a valid patch JSON object (spec + version + ops array), no explanation or markdown.`,
     _patch_spec: {
       format: { spec: "trip-planner-patch", version: "1.0", ops: [] },
       ops: {
-        add_item:     { name: "string", catId: "category id", tab: "pack|todo", subcatLabel: "(optional) subcategory label", trips: "array of trip IDs or \"all\"" },
-        update_item:  { id: "item id", name: "(optional) new name", catId: "(optional) new category id", subcatLabel: "(optional) new label string, or null to remove" },
-        remove_item:  { id: "item id", trips: "array of trip IDs or \"all\"" },
-        delete_item:  { id: "item id — permanently removes from library and all trips" },
-        rename_item:  { id: "item id", newName: "string" },
-        move_item:    { id: "item id", newCatId: "category id" },
-        set_dayof:    { id: "item id", trip: "trip id", value: "boolean" },
+        add_item:        { name: "string", tab: "pack|todo", containerId: "(pack items) container id", catId: "(todo items) category id", trips: "array of trip IDs or \"all\"" },
+        update_item:      { id: "item id", name: "(optional) new name", containerId: "(optional, pack items) new container id", catId: "(optional, todo items) new category id" },
+        remove_item:      { id: "item id", trips: "array of trip IDs or \"all\"" },
+        delete_item:      { id: "item id — permanently removes from library and all trips" },
+        rename_item:      { id: "item id", newName: "string" },
+        move_item:        { id: "item id", newContainerId: "(pack items) container id", newCatId: "(todo items) category id" },
+        set_dayof:        { id: "item id", trip: "trip id", value: "boolean" },
+        add_container:    { id: "string slug", icon: "(optional) emoji", name: "string", parentId: "(optional) container id, omit/null for top-level" },
+        rename_container: { id: "container id", newName: "(optional) string", newIcon: "(optional) emoji", newParentId: "(optional) container id, or null for top-level" },
+        delete_container: { id: "container id — children (items and sub-containers) move up to this container's own parent" },
         add_cat:      { id: "string slug", icon: "emoji", title: "string", tab: "pack|todo" },
         rename_cat:   { id: "category id", newTitle: "(optional) string", newIcon: "(optional) emoji" },
         delete_cat:   { id: "category id — items move to uncategorized" },
@@ -1737,6 +1970,7 @@ function buildAIContext() {
     },
     activeTrip: { id: currentTrip, name: getTripName(currentTrip) },
     categories: Object.values(MASTER_CATS),
+    containers: MASTER_CONTAINERS,
     items: MASTER_ITEMS,
     trips
   };
@@ -1747,7 +1981,7 @@ function openAIContextModal() {
   const json = JSON.stringify(ctx, null, 2);
   document.getElementById('ai-context-json').textContent = json;
   document.getElementById('ai-context-stats').textContent =
-    `${ctx.items.length} items · ${ctx.categories.length} categories · ${ctx.trips.length} trip${ctx.trips.length !== 1 ? 's' : ''}`;
+    `${ctx.items.length} items · ${ctx.categories.length} categories · ${ctx.containers.length} containers · ${ctx.trips.length} trip${ctx.trips.length !== 1 ? 's' : ''}`;
   document.getElementById('ai-copy-btn').textContent = 'Copy';
   document.getElementById('ai-copy-btn').classList.remove('copied');
   document.getElementById('ai-context-modal').classList.add('visible');
@@ -1798,32 +2032,36 @@ document.querySelectorAll('.overlay').forEach(o=>{
 // ═══════════════════════════════════
 // ADD ROW HELPERS (inline new items)
 // ═══════════════════════════════════
-function showAddRow(tab, catId) {
-  const row = document.getElementById(`addrow-${tab}-${catId}`);
+// `groupId` is a catId (todo tab) or containerId (pack tab) — an opaque grouping
+// key used only to namespace the add-row's DOM ids and to place a newly-created item.
+function showAddRow(tab, groupId) {
+  const row = document.getElementById(`addrow-${tab}-${groupId}`);
   if (!row) return;
   row.classList.add('visible');
-  const inp = document.getElementById(`addinput-${tab}-${catId}`);
+  const inp = document.getElementById(`addinput-${tab}-${groupId}`);
   if (inp) { inp.value = ''; inp.focus(); }
 }
-function hideAddRow(tab, catId) {
-  const row = document.getElementById(`addrow-${tab}-${catId}`);
+function hideAddRow(tab, groupId) {
+  const row = document.getElementById(`addrow-${tab}-${groupId}`);
   if (row) row.classList.remove('visible');
-  const sugg = document.getElementById(`addsugg-${tab}-${catId}`);
+  const sugg = document.getElementById(`addsugg-${tab}-${groupId}`);
   if (sugg) sugg.classList.remove('visible');
 }
-function confirmAdd(tab, catId) {
-  const inp = document.getElementById(`addinput-${tab}-${catId}`);
+function confirmAdd(tab, groupId) {
+  const inp = document.getElementById(`addinput-${tab}-${groupId}`);
   if (!inp) return;
   const name = inp.value.trim();
-  if (!name) { hideAddRow(tab, catId); return; }
+  if (!name) { hideAddRow(tab, groupId); return; }
   const existing = MASTER_ITEMS.find(i => i.name.toLowerCase() === name.toLowerCase() && i.tab === tab);
-  if (existing) { addItemToTrip(existing.id, tab); hideAddRow(tab, catId); return; }
+  if (existing) { addItemToTrip(existing.id, tab); hideAddRow(tab, groupId); return; }
   const prefix = tab === 'todo' ? 't_' : 'i_';
   const id = prefix + Date.now() + '_' + Math.random().toString(36).slice(2,6);
-  MASTER_ITEMS.push({ id, name, catId, tab });
+  MASTER_ITEMS.push(tab === 'pack'
+    ? { id, name, containerId:groupId, tab, order:Date.now() }
+    : { id, name, catId:groupId, tab });
   saveMasterItems();
   addItemToTrip(id, tab);
-  hideAddRow(tab, catId);
+  hideAddRow(tab, groupId);
 }
 
 // ═══════════════════════════════════
@@ -1944,18 +2182,28 @@ async function loadUserData(userId) {
       .from('master_items').select('*').eq('user_id', userId);
     if (items && items.length) {
       localStorage.setItem('masterItems', JSON.stringify(
-        items.map(r => ({ id:r.id, name:r.name, catId:r.cat_id, tab:r.tab,
+        items.map(r => ({ id:r.id, name:r.name, tab:r.tab,
+          ...(r.tab === 'pack' ? { containerId: r.container_id, order: r.order_index } : { catId: r.cat_id }),
           ...(r.subcat_label ? { subcatLabel: r.subcat_label } : {}),
           ...(r.default_pending_task ? { defaultPendingTask: r.default_pending_task } : {}) }))
       ));
     }
 
-    // Load master categories
+    // Load master categories (todo tab, flat)
     const { data: cats } = await sb
       .from('master_cats').select('*').eq('user_id', userId);
     if (cats && cats.length) {
       localStorage.setItem('masterCats', JSON.stringify(
         cats.map(r => ({ id:r.id, icon:r.icon, title:r.title, tab:r.tab }))
+      ));
+    }
+
+    // Load master containers (pack tab, tree)
+    const { data: containers } = await sb
+      .from('master_containers').select('*').eq('user_id', userId);
+    if (containers && containers.length) {
+      localStorage.setItem('masterContainers', JSON.stringify(
+        containers.map(r => ({ id:r.id, name:r.name, icon:r.icon, parentId:r.parent_id, order:r.order_index }))
       ));
     }
 
@@ -2006,13 +2254,21 @@ async function pushAllToSupabase(userId) {
     const items = JSON.parse(localStorage.getItem('masterItems') || 'null');
     if (items && items.length) {
       await sb.from('master_items').upsert(
-        items.map(i => ({ user_id:userId, id:i.id, name:i.name, cat_id:i.catId, tab:i.tab, subcat_label:i.subcatLabel||null, default_pending_task:i.defaultPendingTask||null }))
+        items.map(i => ({ user_id:userId, id:i.id, name:i.name, tab:i.tab,
+          cat_id:i.catId||null, container_id:i.containerId||null, order_index:i.order||null,
+          subcat_label:i.subcatLabel||null, default_pending_task:i.defaultPendingTask||null }))
       );
     }
     const cats = JSON.parse(localStorage.getItem('masterCats') || 'null');
     if (cats && cats.length) {
       await sb.from('master_cats').upsert(
         cats.map(c => ({ user_id:userId, id:c.id, icon:c.icon, title:c.title, tab:c.tab }))
+      );
+    }
+    const containers = JSON.parse(localStorage.getItem('masterContainers') || 'null');
+    if (containers && containers.length) {
+      await sb.from('master_containers').upsert(
+        containers.map(c => ({ user_id:userId, id:c.id, name:c.name, icon:c.icon||null, parent_id:c.parentId||null, order_index:c.order||0 }))
       );
     }
     const tripList = JSON.parse(localStorage.getItem(sk('__meta__','trips')) || '["salem","birthday"]');
@@ -2103,7 +2359,9 @@ async function syncMasterItemsToSupabase() {
     await sb.from('master_items').delete().eq('user_id', currentUserId);
     if (MASTER_ITEMS.length) {
       await sb.from('master_items').insert(
-        MASTER_ITEMS.map(i => ({ user_id:currentUserId, id:i.id, name:i.name, cat_id:i.catId, tab:i.tab, subcat_label:i.subcatLabel||null, default_pending_task:i.defaultPendingTask||null }))
+        MASTER_ITEMS.map(i => ({ user_id:currentUserId, id:i.id, name:i.name, tab:i.tab,
+          cat_id:i.catId||null, container_id:i.containerId||null, order_index:i.order||null,
+          subcat_label:i.subcatLabel||null, default_pending_task:i.defaultPendingTask||null }))
       );
     }
   } catch(e) { console.error('Master items sync error:', e); }
@@ -2120,6 +2378,18 @@ async function syncMasterCatsToSupabase() {
       );
     }
   } catch(e) { console.error('Master cats sync error:', e); }
+}
+
+async function syncMasterContainersToSupabase() {
+  if (!sb || !currentUserId) return;
+  try {
+    await sb.from('master_containers').delete().eq('user_id', currentUserId);
+    if (MASTER_CONTAINERS.length) {
+      await sb.from('master_containers').insert(
+        MASTER_CONTAINERS.map(c => ({ user_id:currentUserId, id:c.id, name:c.name, icon:c.icon||null, parent_id:c.parentId||null, order_index:c.order||0 }))
+      );
+    }
+  } catch(e) { console.error('Master containers sync error:', e); }
 }
 
 async function syncTripsToSupabase() {
@@ -2183,6 +2453,9 @@ function init() {
   if (savedItems) MASTER_ITEMS = savedItems;
   const savedCats = getMasterCats();
   if (savedCats) savedCats.forEach(c=>{ if(!MASTER_CATS[c.id]) MASTER_CATS[c.id]=c; });
+  const savedContainers = getMasterContainers();
+  if (savedContainers) MASTER_CONTAINERS = savedContainers;
+  ensureLooseContainer();
 
   const trips = getTripList();
   if (!trips.includes('salem')) { trips.unshift('salem'); saveTripList(trips); }
@@ -2224,32 +2497,34 @@ function getSuggestions(query, tab) {
     .map(r => r.item);
 }
 
-function _updateAddSuggestions(inp, tab, catId) {
-  const sugg = document.getElementById(`addsugg-${tab}-${catId}`);
+function _updateAddSuggestions(inp, tab, groupId) {
+  const sugg = document.getElementById(`addsugg-${tab}-${groupId}`);
   if (!sugg) return;
   const matches = getSuggestions(inp.value, tab);
   if (!matches.length) { sugg.classList.remove('visible'); return; }
   const activeIds = new Set(getActiveIds(currentTrip, tab));
   sugg.innerHTML = matches.map(item => {
-    const cat = getCat(item.catId);
+    const groupLabel = tab === 'pack'
+      ? getContainerPath(getItemContainerId(item))
+      : `${getCat(item.catId)?.icon||''} ${getCat(item.catId)?.title||item.catId}`;
     const active = activeIds.has(item.id);
     return `<div class="add-sugg-item${active?' is-active':''}" data-id="${item.id}" data-active="${active}">
       <span class="add-sugg-name">${item.name}</span>
-      <span class="add-sugg-cat">${cat?.icon||''} ${cat?.title||item.catId}</span>
+      <span class="add-sugg-cat">${groupLabel}</span>
     </div>`;
   }).join('');
   sugg.querySelectorAll('.add-sugg-item:not(.is-active)').forEach(el => {
     el.onmousedown = e => {
       e.preventDefault();
       addItemToTrip(el.dataset.id, tab);
-      hideAddRow(tab, catId);
+      hideAddRow(tab, groupId);
     };
   });
   sugg.classList.add('visible');
 }
 
-function _moveAddSugg(tab, catId, dir) {
-  const sugg = document.getElementById(`addsugg-${tab}-${catId}`);
+function _moveAddSugg(tab, groupId, dir) {
+  const sugg = document.getElementById(`addsugg-${tab}-${groupId}`);
   if (!sugg || !sugg.classList.contains('visible')) return;
   const items = [...sugg.querySelectorAll('.add-sugg-item:not(.is-active)')];
   if (!items.length) return;
@@ -2260,13 +2535,13 @@ function _moveAddSugg(tab, catId, dir) {
   if (next >= 0 && next < items.length) items[next].classList.add('focused');
 }
 
-function _selectAddSugg(tab, catId) {
-  const sugg = document.getElementById(`addsugg-${tab}-${catId}`);
+function _selectAddSugg(tab, groupId) {
+  const sugg = document.getElementById(`addsugg-${tab}-${groupId}`);
   if (!sugg) return false;
   const focused = sugg.querySelector('.add-sugg-item.focused');
   if (!focused) return false;
   addItemToTrip(focused.dataset.id, tab);
-  hideAddRow(tab, catId);
+  hideAddRow(tab, groupId);
   return true;
 }
 
@@ -2368,7 +2643,7 @@ function clearDefaultPendingTask() {
     saveMasterItems();
   }
   closeAllModals();
-  if (master) openEditModal(master, 'pack', master.catId);
+  if (master) openEditModal(master, 'pack', getItemContainerId(master));
 }
 
 function onPendingCatChange() {
@@ -2392,7 +2667,7 @@ function submitPendingModal() {
       saveMasterItems();
     }
     closeAllModals();
-    if (master) openEditModal(master, 'pack', master.catId);
+    if (master) openEditModal(master, 'pack', getItemContainerId(master));
     return;
   }
 
@@ -2460,7 +2735,7 @@ function renderDuplicatesBody() {
         <div class="pending-radio-list">${g.map((item, i) => `
           <label class="pending-radio-item">
             <input type="radio" name="dup-survivor-${gi}" value="${item.id}" ${i===0?'checked':''}>
-            <span>${item.name}${item.subcatLabel ? ` · <span style="color:var(--muted)">${item.subcatLabel}</span>` : ''} — <span style="color:var(--muted)">${getCat(item.catId)?.title || item.catId}</span></span>
+            <span>${item.name} — <span style="color:var(--muted)">${groupTitle(item.tab, getGroupId(item))}</span></span>
           </label>`).join('')}
         </div>
         <div style="margin-top:0.6rem"><button class="btn primary" onclick="mergeDuplicateGroup(${gi})">Merge into selected →</button></div>
@@ -2537,7 +2812,7 @@ function mergeItemsInto(survivorId, removeIds) {
   const deleted = gs('__meta__', 'permanentlyDeleted', []);
   removeIds.forEach(id => {
     const item = getItem(id);
-    if (item) deleted.push({ id: item.id, name: item.name, catId: item.catId, tab: item.tab, deletedAt: Date.now() });
+    if (item) deleted.push({ id: item.id, name: item.name, catId: item.catId, containerId: item.containerId, tab: item.tab, deletedAt: Date.now() });
   });
   ss('__meta__', 'permanentlyDeleted', deleted);
 
@@ -2656,6 +2931,9 @@ function applyPatch(patch) {
         case 'add_cat':       _patchAddCat(op); break;
         case 'rename_cat':    _patchRenameCat(op); break;
         case 'delete_cat':    _patchDeleteCat(op); break;
+        case 'add_container':    _patchAddContainer(op); break;
+        case 'rename_container': _patchRenameContainer(op); break;
+        case 'delete_container': _patchDeleteContainer(op); break;
         case 'add_trip':      tripListChanged = _patchAddTrip(op) || tripListChanged; break;
         case 'rename_trip':   _patchRenameTrip(op); break;
         case 'delete_trip':   tripListChanged = _patchDeleteTrip(op) || tripListChanged; break;
@@ -2670,6 +2948,7 @@ function applyPatch(patch) {
 
   saveMasterItems();
   saveMasterCats();
+  saveMasterContainers();
   if (tripListChanged) saveTripList(getTripList());
   buildTripSelect();
   renderAll();
@@ -2692,8 +2971,9 @@ function _patchAddItem(op) {
     itemId = existing.id;
   } else {
     itemId = 'i_' + _slugify(name) + '_' + Date.now();
-    MASTER_ITEMS.push({ id:itemId, name, catId:op.catId||'uncategorized', tab,
-      ...(op.subcatLabel ? { subcatLabel:op.subcatLabel } : {}) });
+    MASTER_ITEMS.push(tab === 'pack'
+      ? { id:itemId, name, containerId:op.containerId||'c_loose', tab, order:Date.now() }
+      : { id:itemId, name, catId:op.catId||'uncategorized', tab });
   }
   _patchTripIds(op.trips).forEach(tripId => {
     const ids = getActiveIds(tripId, tab);
@@ -2705,10 +2985,10 @@ function _patchUpdateItem(op) {
   const item = MASTER_ITEMS.find(i => i.id === op.id);
   if (!item) { console.warn('applyPatch update_item: unknown id', op.id); return; }
   if (op.name !== undefined) item.name = op.name;
-  if (op.catId !== undefined) item.catId = op.catId;
-  if ('subcatLabel' in op) {
-    if (op.subcatLabel == null || op.subcatLabel === '') delete item.subcatLabel;
-    else item.subcatLabel = op.subcatLabel;
+  if (item.tab === 'pack') {
+    if (op.containerId !== undefined) item.containerId = op.containerId;
+  } else {
+    if (op.catId !== undefined) item.catId = op.catId;
   }
 }
 
@@ -2740,7 +3020,8 @@ function _patchRenameItem(op) {
 function _patchMoveItem(op) {
   const item = MASTER_ITEMS.find(i => i.id === op.id);
   if (!item) { console.warn('applyPatch move_item: unknown id', op.id); return; }
-  item.catId = op.newCatId;
+  if (item.tab === 'pack') item.containerId = op.newContainerId;
+  else item.catId = op.newCatId;
 }
 
 function _patchSetDayof(op) {
@@ -2780,6 +3061,30 @@ function _patchDeleteCat(op) {
   }
   MASTER_ITEMS.forEach(item => { if (item.catId === op.id) item.catId = 'uncategorized'; });
   delete MASTER_CATS[op.id];
+}
+
+function _patchAddContainer(op) {
+  if (!getContainer(op.id)) {
+    MASTER_CONTAINERS.push({ id:op.id, name:op.name, icon:op.icon||'📁', parentId:op.parentId||null, order:Date.now() });
+  }
+}
+
+function _patchRenameContainer(op) {
+  const container = getContainer(op.id);
+  if (!container) { console.warn('applyPatch rename_container: unknown id', op.id); return; }
+  if (op.newName) container.name = op.newName;
+  if (op.newIcon) container.icon = op.newIcon;
+  if ('newParentId' in op) container.parentId = op.newParentId || null;
+}
+
+function _patchDeleteContainer(op) {
+  const container = getContainer(op.id);
+  if (!container) { console.warn('applyPatch delete_container: unknown id', op.id); return; }
+  if (op.id === 'c_loose') { console.warn('applyPatch delete_container: cannot delete the Loose container'); return; }
+  // Children (items and sub-containers) move up to this container's own parent.
+  MASTER_ITEMS.forEach(item => { if (item.containerId === op.id) item.containerId = container.parentId || 'c_loose'; });
+  MASTER_CONTAINERS.forEach(c => { if (c.parentId === op.id) c.parentId = container.parentId; });
+  MASTER_CONTAINERS = MASTER_CONTAINERS.filter(c => c.id !== op.id);
 }
 
 function _patchAddTrip(op) {
