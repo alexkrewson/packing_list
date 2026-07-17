@@ -2289,6 +2289,26 @@ async function _flushMeta() {
   } catch(e) { console.error('Meta sync error:', e); }
 }
 
+// Debounced trip/meta syncs wait up to 600-1200ms before writing — if the tab closes
+// or reloads before then, that write never happens and a stale Supabase copy can
+// overwrite fresh local state on the next load. Flush immediately (skipping the
+// debounce) as soon as the tab is hidden or about to unload, so the write has the
+// best possible chance to land before the page actually goes away.
+function flushAllPendingSyncs() {
+  Object.keys(_pendingTripSync).forEach(tripId => {
+    clearTimeout(_pendingTripSync[tripId]);
+    delete _pendingTripSync[tripId];
+    _flushTripState(tripId);
+  });
+  if (_metaSyncTimer) {
+    clearTimeout(_metaSyncTimer);
+    _metaSyncTimer = null;
+    _flushMeta();
+  }
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushAllPendingSyncs(); });
+window.addEventListener('pagehide', flushAllPendingSyncs);
+
 async function syncMasterItemsToSupabase() {
   if (!sb || !currentUserId) return;
   try {
