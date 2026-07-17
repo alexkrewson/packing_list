@@ -614,6 +614,11 @@ const MASTER_CATS = {
   tillytodo: { id:'tillytodo',icon:'🐕', title:'Tilly',           tab:'todo' },
 };
 
+// Bump this whenever MASTER_ITEMS/MASTER_CONTAINERS below are deliberately reset in
+// code — otherwise init() prefers the user's already-persisted (stale) copy over the
+// new hardcoded one, silently undoing the reset. See init().
+const MASTER_LIBRARY_VERSION = 2;
+
 // Pack-tab containers — a tree via parentId (null = top level). `order` is a single
 // counter shared with MASTER_ITEMS' `order` field, so a sub-container can be
 // interleaved with items as an ordinary sibling within its parent, not just grouped
@@ -2448,14 +2453,28 @@ async function startup() {
 // INIT
 // ═══════════════════════════════════
 function init() {
-  // Load any persisted master items/cats
-  const savedItems = getMasterItems();
-  if (savedItems) MASTER_ITEMS = savedItems;
+  // If the hardcoded library version has moved on since this device last saved its
+  // copy, a deliberate reset happened in code — let the new hardcoded MASTER_ITEMS/
+  // MASTER_CONTAINERS win instead of loading the stale persisted ones, then persist
+  // that (which also overwrites any stale rows already synced to Supabase).
+  const storedVersion = parseInt(localStorage.getItem('masterLibraryVersion') || '0', 10);
+  const isReset = storedVersion !== MASTER_LIBRARY_VERSION;
+
+  if (!isReset) {
+    const savedItems = getMasterItems();
+    if (savedItems) MASTER_ITEMS = savedItems;
+    const savedContainers = getMasterContainers();
+    if (savedContainers) MASTER_CONTAINERS = savedContainers;
+  }
   const savedCats = getMasterCats();
   if (savedCats) savedCats.forEach(c=>{ if(!MASTER_CATS[c.id]) MASTER_CATS[c.id]=c; });
-  const savedContainers = getMasterContainers();
-  if (savedContainers) MASTER_CONTAINERS = savedContainers;
   ensureLooseContainer();
+
+  if (isReset) {
+    localStorage.setItem('masterLibraryVersion', String(MASTER_LIBRARY_VERSION));
+    saveMasterItems();
+    saveMasterContainers();
+  }
 
   const trips = getTripList();
   if (!trips.includes('salem')) { trips.unshift('salem'); saveTripList(trips); }
