@@ -618,6 +618,12 @@ const MASTER_CATS = {
 // new hardcoded one, silently undoing the reset. See init().
 const MASTER_LIBRARY_VERSION = 2;
 
+// Bump whenever a TRIP_DEFAULTS[...].pack list below is deliberately force-applied —
+// getActiveIds() only falls back to TRIP_DEFAULTS when no packActive override is
+// stored, so once a trip has one (as Salem does), the hardcoded default is normally
+// ignored. This forces it to win once, the same way MASTER_LIBRARY_VERSION does.
+const SALEM_PACK_RESET_VERSION = 1;
+
 // Pack-tab containers — a tree via parentId (null = top level). `order` is a single
 // counter shared with MASTER_ITEMS' `order` field, so a sub-container can be
 // interleaved with items as an ordinary sibling within its parent, not just grouped
@@ -748,9 +754,7 @@ let MASTER_ITEMS = [
 const TRIP_DEFAULTS = {
   salem: {
     name: 'Salem Trip',
-    // Pack list reset (2026-07-16): old item ids retired, pack starts empty —
-    // repopulate per-trip from the pool.
-    pack: [],
+    pack: ['i_powerStuff','i_towels','i_lights','i_stoveStuff','i_bottlePot','i_foodContainer','i_thermos','i_coffeeMug','i_ziplocBags','i_trashBags','i_wetWipes','i_tillyFood','i_chewySticks','i_bowls','i_toys','i_leash','i_tshirts','i_workPants','i_workBelt','i_workShirts','i_socks','i_underwear','i_pajamaPants','i_workShoes','i_warmHat','i_laundryBag','i_toothbrush','i_toothpaste','i_faceLotions','i_handSoap','i_floss','i_waterFlosser','i_hygieneC','i_desk','i_downStuff','i_sleepingPad','i_cot','i_tent','i_vrStuff','i_externalMonitor','i_bugExploder','i_yogaMat','i_pillow','i_toilet','i_pool','i_showerItem','i_sprayer','i_secretStorage','i_peeBottle','i_waters','i_beachTowel','i_workComputer','i_kbMouse','i_workBadge','i_headphonesAfter','i_headphonesEarbuds','i_headphonesOther','i_backpackWaterBottle','i_powerStrip','i_usbcConnectors','i_kbMouseAdapters','i_extMonitorCables','i_carSecurity','i_jumpStarter','i_paperTowels','i_lighter','i_ereader','i_spork','i_headlamp','i_keys','i_wallet','i_phone','i_sunglasses','i_fieldy','i_gloves'],
     todo: ['t_drainsnake','t_padlock','t_vacuum','t_cleansync','t_shave'],
   },
   birthday: {
@@ -2425,6 +2429,12 @@ function init() {
     localStorage.setItem('masterLibraryVersion', String(MASTER_LIBRARY_VERSION));
     saveMasterItems();
     saveMasterContainers();
+  }
+
+  const storedSalemPackVersion = parseInt(localStorage.getItem('salemPackResetVersion') || '0', 10);
+  if (storedSalemPackVersion !== SALEM_PACK_RESET_VERSION) {
+    setActiveIds('salem', 'pack', [...TRIP_DEFAULTS.salem.pack]);
+    localStorage.setItem('salemPackResetVersion', String(SALEM_PACK_RESET_VERSION));
   }
 
   const trips = getTripList();
