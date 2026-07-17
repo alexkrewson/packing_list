@@ -754,6 +754,7 @@ let editState = {};
 // Supabase auth & sync state
 let sb = null;           // Supabase client instance (window.supabase is the CDN namespace)
 let currentUserId = null;
+let _accessToken = null; // current session JWT, kept in sync for keepalive fetches (see _keepaliveUpsert)
 const _pendingTripSync = {};
 let _metaSyncTimer = null;
 
@@ -2364,44 +2365,63 @@ async function pushAllToSupabase(userId) {
 // ═══════════════════════════════════
 // SUPABASE WRITE HELPERS
 // ═══════════════════════════════════
+// Fires a Supabase upsert via a raw fetch with keepalive:true, which (unlike the
+// supabase-js client's internal fetch) the browser guarantees to keep sending even
+// if the page is navigated away from or closed immediately after this call — the
+// normal debounced-then-await-supabase-js path can otherwise lose the write if the
+// tab closes before the request completes. Falls back to the regular client if we
+// don't have a session token cached yet.
+async function _keepaliveUpsert(table, row) {
+  if (!_accessToken) { try { await sb.from(table).upsert(row); } catch(e) { console.error(table+' sync error:', e); } return; }
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': 'Bearer ' + _accessToken,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates,return=minimal'
+      },
+      body: JSON.stringify(row),
+      keepalive: true
+    });
+  } catch(e) { console.error(table+' keepalive sync error:', e); }
+}
+
 function queueTripSync(tripId) {
   if (!sb || !currentUserId) return;
   if (_pendingTripSync[tripId]) clearTimeout(_pendingTripSync[tripId]);
-  _pendingTripSync[tripId] = setTimeout(() => _flushTripState(tripId), 600);
+  _pendingTripSync[tripId] = setTimeout(() => _flushTripState(tripId), 350);
 }
 async function _flushTripState(tripId) {
   if (!sb || !currentUserId) return;
   const ga = k => { const v = localStorage.getItem(sk(tripId,k)); return v ? JSON.parse(v) : null; };
-  try {
-    await sb.from('trip_state').upsert({
-      user_id:            currentUserId,
-      trip_id:            tripId,
-      pack_active:        ga('packActive'),
-      todo_active:        ga('todoActive'),
-      pack_checked:       ga('packChecked')       || {},
-      todo_checked:       ga('todoChecked')       || {},
-      pack_pending:       ga('packPending')       || {},
-      updated_at:         new Date().toISOString()
-    });
-  } catch(e) { console.error('Trip state sync error:', e); }
+  await _keepaliveUpsert('trip_state', {
+    user_id:            currentUserId,
+    trip_id:            tripId,
+    pack_active:        ga('packActive'),
+    todo_active:        ga('todoActive'),
+    pack_checked:       ga('packChecked')       || {},
+    todo_checked:       ga('todoChecked')       || {},
+    pack_pending:       ga('packPending')       || {},
+    updated_at:         new Date().toISOString()
+  });
 }
 
 function queueMetaSync() {
   if (!sb || !currentUserId) return;
   if (_metaSyncTimer) clearTimeout(_metaSyncTimer);
-  _metaSyncTimer = setTimeout(() => _flushMeta(), 1200);
+  _metaSyncTimer = setTimeout(() => _flushMeta(), 600);
 }
 async function _flushMeta() {
   if (!sb || !currentUserId) return;
-  try {
-    await sb.from('user_meta').upsert({
-      user_id:             currentUserId,
-      last_trip:           JSON.parse(localStorage.getItem(sk('__meta__','lastTrip'))          || 'null'),
-      permanently_deleted: JSON.parse(localStorage.getItem(sk('__meta__','permanentlyDeleted'))|| '[]'),
-      change_log:          JSON.parse(localStorage.getItem('changeLog')                        || '[]'),
-      edit_log:            JSON.parse(localStorage.getItem('editLog')                          || '[]')
-    });
-  } catch(e) { console.error('Meta sync error:', e); }
+  await _keepaliveUpsert('user_meta', {
+    user_id:             currentUserId,
+    last_trip:           JSON.parse(localStorage.getItem(sk('__meta__','lastTrip'))          || 'null'),
+    permanently_deleted: JSON.parse(localStorage.getItem(sk('__meta__','permanentlyDeleted'))|| '[]'),
+    change_log:          JSON.parse(localStorage.getItem('changeLog')                        || '[]'),
+    edit_log:            JSON.parse(localStorage.getItem('editLog')                          || '[]')
+  });
 }
 
 // Debounced trip/meta syncs wait up to 600-1200ms before writing — if the tab closes
@@ -2492,6 +2512,7 @@ async function startup() {
   // Watch for future state changes (sign-out, token refresh, etc.)
   // onAuthSuccess has a guard so it's safe even if this and getSession() both fire.
   sb.auth.onAuthStateChange(async (event, session) => {
+    if (session) _accessToken = session.access_token;
     if (event === 'PASSWORD_RECOVERY' && session) {
       await onAuthSuccess(session.user);
       openPasswordResetModal();
@@ -2506,6 +2527,7 @@ async function startup() {
   try {
     const { data: { session } } = await sb.auth.getSession();
     if (session) {
+      _accessToken = session.access_token;
       await onAuthSuccess(session.user);
     } else {
       showAuthForm();
