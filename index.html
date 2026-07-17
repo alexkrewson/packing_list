@@ -10,7 +10,6 @@
 :root {
   --ink:#1a1a2e; --paper:#f5f0e8; --accent:#c1440e;
   --muted:#8a7f72; --line:#d6cfc4; --green:#3d6b4f;
-  --amber:#a06000; --amber-bg:rgba(194,120,3,0.07);
   --pending:#1971c2; --pending-bg:rgba(25,113,194,0.07);
   --pool-bg:#ede8e0; --pool-border:#c8c0b4;
 }
@@ -80,16 +79,11 @@ li.checked .item-text{text-decoration:line-through;color:var(--muted);}
 .cb.indeterminate{border-color:var(--green);}
 .cb.indeterminate::after{left:2px;top:5px;width:8px;height:2px;border:none;background:var(--green);transform:none;}
 .item-text{transition:color 0.15s;flex:1;}
-li.dayof{background:var(--amber-bg);}
-li.dayof .item-text{color:var(--amber);}
-li.dayof .cb{border-color:#c27803;}
-li.dayof.checked .item-text{color:var(--muted);}
-.dayof-badge{font-size:0.6rem;font-weight:500;color:var(--amber);background:rgba(194,120,3,0.12);border-radius:3px;padding:0.08rem 0.35rem;flex-shrink:0;white-space:nowrap;}
-li.pending{background:var(--pending-bg);}
-li.pending .item-text{color:var(--pending);}
-li.pending .cb{border-color:var(--pending);}
+li.pending{background:var(--pending-item-bg, var(--pending-bg));}
+li.pending .item-text{color:var(--pending-item-color, var(--pending));}
+li.pending .cb{border-color:var(--pending-item-color, var(--pending));}
 li.pending.checked .item-text{color:var(--muted);}
-.pending-badge{font-size:0.6rem;font-weight:500;color:var(--pending);background:rgba(25,113,194,0.12);border-radius:3px;padding:0.08rem 0.35rem;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:130px;}
+.pending-badge{font-size:0.6rem;font-weight:500;color:var(--pending-item-color, var(--pending));background:var(--pending-item-badge-bg, rgba(25,113,194,0.12));border-radius:3px;padding:0.08rem 0.35rem;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:130px;}
 
 /* Pending modal */
 .pending-radio-list{max-height:200px;overflow-y:auto;margin:0.5rem 0 0.8rem;border:1px solid var(--line);border-radius:4px;}
@@ -186,7 +180,6 @@ li.pending.checked .item-text{color:var(--muted);}
 .tag-added{background:rgba(61,107,79,0.12);color:var(--green);}
 .tag-removed{background:rgba(193,68,14,0.1);color:var(--accent);}
 .tag-checked{background:rgba(61,107,79,0.08);color:var(--green);}
-.tag-dayof{background:rgba(194,120,3,0.12);color:var(--amber);}
 .edits-cat{font-size:0.68rem;color:var(--muted);background:rgba(0,0,0,0.05);border-radius:3px;padding:0.1rem 0.35rem;flex-shrink:0;}
 .edits-empty{font-size:0.85rem;color:var(--muted);font-style:italic;}
 .edits-json-wrap{margin-top:1rem;flex-shrink:0;border-top:1px solid var(--line);padding-top:0.8rem;}
@@ -455,7 +448,7 @@ li.pending.checked .item-text{color:var(--muted);}
     </div>
     <div class="modal-field" id="edit-todo-newcat-field" style="display:none">
       <label>New Category Name</label>
-      <input id="edit-todo-newcat" type="text" placeholder="e.g. Day-of Prep">
+      <input id="edit-todo-newcat" type="text" placeholder="e.g. Errands">
     </div>
     <div class="modal-btns">
       <button class="btn danger" onclick="openConfirmDeleteTodo()">🗑 Delete Permanently</button>
@@ -566,6 +559,12 @@ li.pending.checked .item-text{color:var(--muted);}
       <label>Category</label>
       <select id="pending-cat-select" onchange="onPendingCatChange()"></select>
       <input id="pending-newcat-input" class="suggest-newcat-input" type="text" placeholder="New category name…">
+    </div>
+    <div class="modal-field" id="pending-alsodefault-row" style="display:none">
+      <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.82rem;font-weight:300;cursor:pointer">
+        <input type="checkbox" id="pending-also-default">
+        Also make this the default for future items
+      </label>
     </div>
     <div class="modal-btns">
       <button class="btn danger" id="pending-clear-btn" onclick="clearDefaultPendingTask()" style="display:none">Clear default</button>
@@ -752,7 +751,6 @@ const TRIP_DEFAULTS = {
     // Pack list reset (2026-07-16): old item ids retired, pack starts empty —
     // repopulate per-trip from the pool.
     pack: [],
-    defaultDayof: [],
     todo: ['t_drainsnake','t_padlock','t_vacuum','t_cleansync','t_shave'],
   },
   birthday: {
@@ -967,9 +965,6 @@ function renderTodoTab() {
   const tab = 'todo';
   const activeIds = new Set(getActiveIds(currentTrip, tab));
   const checked = gs(currentTrip, tab+'Checked', {});
-  const customDayof = new Set(gs(currentTrip, tab+'Dayof', []));
-  const builtinDayof = new Set(TRIP_DEFAULTS[currentTrip]?.defaultDayof || []);
-  const dayof = new Set([...builtinDayof, ...customDayof]);
   const pending = {};
 
   // Active items grouped by cat
@@ -1008,7 +1003,7 @@ function renderTodoTab() {
         ul.appendChild(lbl);
       }
       catItems.filter(i=>(i.subcatLabel||'')=== sub).forEach(item => {
-        ul.appendChild(buildActiveLi(item, tab, checked, dayof, pending));
+        ul.appendChild(buildActiveLi(item, tab, checked, pending));
       });
     });
 
@@ -1043,16 +1038,13 @@ function renderPackTab() {
   const tab = 'pack';
   const activeIds = new Set(getActiveIds(currentTrip, tab));
   const checked = gs(currentTrip, 'packChecked', {});
-  const customDayof = new Set(gs(currentTrip, 'packDayof', []));
-  const builtinDayof = new Set(TRIP_DEFAULTS[currentTrip]?.defaultDayof || []);
-  const dayof = new Set([...builtinDayof, ...customDayof]);
   const pending = getPending(currentTrip);
 
   const gridEl = document.getElementById('pack-grid');
   gridEl.innerHTML = '';
 
   containerChildren(null).forEach(container => {
-    const node = buildContainerNode(container, 0, activeIds, checked, dayof, pending);
+    const node = buildContainerNode(container, 0, activeIds, checked, pending);
     if (node) gridEl.appendChild(node);
   });
 
@@ -1079,7 +1071,7 @@ function toggleContainer(containerId, activeLeafIds) {
   renderTab('pack');
 }
 
-function buildContainerNode(container, depth, activeIds, checked, dayof, pending) {
+function buildContainerNode(container, depth, activeIds, checked, pending) {
   const leafIds = collectLeafIds(container.id);
   const activeLeafIds = leafIds.filter(id => activeIds.has(id));
   if (!activeLeafIds.length) return null;
@@ -1105,9 +1097,9 @@ function buildContainerNode(container, depth, activeIds, checked, dayof, pending
   const childContainers = containerChildren(container.id).map(c => ({ type:'container', node:c, order:c.order }));
   [...childItems, ...childContainers].sort((a,b)=>a.order-b.order).forEach(child => {
     if (child.type === 'item') {
-      if (activeIds.has(child.node.id)) ul.appendChild(buildActiveLi(child.node, 'pack', checked, dayof, pending));
+      if (activeIds.has(child.node.id)) ul.appendChild(buildActiveLi(child.node, 'pack', checked, pending));
     } else {
-      const subNode = buildContainerNode(child.node, depth+1, activeIds, checked, dayof, pending);
+      const subNode = buildContainerNode(child.node, depth+1, activeIds, checked, pending);
       if (subNode) {
         const li = document.createElement('li');
         li.className = 'container-li';
@@ -1137,22 +1129,36 @@ function buildContainerNode(container, depth, activeIds, checked, dayof, pending
   return wrap;
 }
 
-function buildActiveLi(item, tab, checked, dayof, pending) {
+// Distinct hex colors used to tell different "waiting on" tasks apart at a glance —
+// deterministic per todo item id so the same task always renders the same color.
+const PENDING_COLORS = ['#1971c2','#7048e8','#0ca678','#e64980','#4263eb','#1098ad','#862e9c','#495057'];
+function pendingColorFor(todoId) {
+  let hash = 0;
+  for (let i=0; i<todoId.length; i++) hash = (hash*31 + todoId.charCodeAt(i)) >>> 0;
+  return PENDING_COLORS[hash % PENDING_COLORS.length];
+}
+function _hexToRgba(hex, alpha) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${alpha})`;
+}
+
+function buildActiveLi(item, tab, checked, pending) {
   const li = document.createElement('li');
   const isChecked = !!checked[item.id];
-  const isDayof = dayof.has(item.id);
   const pendingTodoId = pending?.[item.id];
   if (isChecked) li.classList.add('checked');
-  if (isDayof) li.classList.add('dayof');
-  if (pendingTodoId) li.classList.add('pending');
-  const dayofBadge = isDayof ? `<span class="dayof-badge">☀️ Day of</span>` : '';
   let pendingBadge = '';
   if (pendingTodoId) {
+    li.classList.add('pending');
+    const color = pendingColorFor(pendingTodoId);
+    li.style.setProperty('--pending-item-color', color);
+    li.style.setProperty('--pending-item-bg', _hexToRgba(color, 0.07));
+    li.style.setProperty('--pending-item-badge-bg', _hexToRgba(color, 0.12));
     const todoItem = getItem(pendingTodoId);
     const taskName = todoItem ? todoItem.name : '?';
     pendingBadge = `<span class="pending-badge" title="Waiting on: ${taskName}">⏳ ${taskName}</span>`;
   }
-  li.innerHTML = `<span class="cb"></span><span class="item-text">${item.name}</span>${dayofBadge}${pendingBadge}`;
+  li.innerHTML = `<span class="cb"></span><span class="item-text">${item.name}</span>${pendingBadge}`;
   li.onclick = e => { if (!e.target.classList.contains('del-btn')) toggleItem(item.id, tab); };
   if (tab === 'pack') attachItemCtx(li, item, tab);
   else attachTodoCtx(li, item);
@@ -1291,15 +1297,12 @@ function removeItemFromTrip(itemId, tab) {
 function attachItemCtx(li, item, tab) {
   const handler = e => {
     e.preventDefault(); closeCtxMenu();
-    const dayof = new Set([...new Set(TRIP_DEFAULTS[currentTrip]?.defaultDayof||[]), ...gs(currentTrip,tab+'Dayof',[])]);
-    const isDayof = dayof.has(item.id);
     const checked = gs(currentTrip, tab+'Checked', {});
     const isChecked = !!checked[item.id];
     const isPending = !!getPending(currentTrip)[item.id];
     const menu = document.createElement('div');
     menu.className = 'ctx-menu';
     menu.innerHTML = `
-      <div class="ctx-item" id="cm-dayof">${isDayof?'✕ Remove <u>d</u>ay-of flag':'☀️ Pack <u>d</u>ay-of'}</div>
       <div class="ctx-item" id="cm-pending">${isPending?'✕ Remove <u>p</u>ending':'⏳ Set <u>p</u>ending'}</div>
       <div class="ctx-divider"></div>
       <div class="ctx-item" id="cm-toggle">${isChecked?'☐ Un<u>c</u>heck':'☑ <u>C</u>heck'}</div>
@@ -1309,25 +1312,6 @@ function attachItemCtx(li, item, tab) {
       <div class="ctx-divider"></div>
       <div class="ctx-item danger" id="cm-remove">✕ <u>R</u>emove from list</div>
     `;
-    const dayofFn = () => {
-      const d = gs(currentTrip, tab+'Dayof', []);
-      const s = new Set(d);
-      const builtinDayofSet = new Set(TRIP_DEFAULTS[currentTrip]?.defaultDayof||[]);
-      if (s.has(item.id)) {
-        s.delete(item.id);
-        if (builtinDayofSet.has(item.id)) {
-          const rem = new Set(gs(currentTrip, tab+'DayofRemoved', []));
-          rem.add(item.id); ss(currentTrip, tab+'DayofRemoved', [...rem]);
-        }
-      } else {
-        s.add(item.id);
-        const rem = new Set(gs(currentTrip, tab+'DayofRemoved', []));
-        rem.delete(item.id); ss(currentTrip, tab+'DayofRemoved', [...rem]);
-      }
-      ss(currentTrip, tab+'Dayof', [...s]);
-      li.classList.toggle('dayof', s.has(item.id) || (builtinDayofSet.has(item.id) && !gs(currentTrip, tab+'DayofRemoved', []).includes(item.id)));
-      closeCtxMenu();
-    };
     const toggleFn  = () => { toggleItem(item.id, tab); closeCtxMenu(); };
     const editFn    = () => { closeCtxMenu(); openEditModal(item, tab, getItemContainerId(item)); };
     const removeFn  = () => { removeItemFromTrip(item.id, tab); closeCtxMenu(); };
@@ -1335,7 +1319,6 @@ function attachItemCtx(li, item, tab) {
     const pendingFn = isPending
       ? () => { clearPendingForItem(item.id); }
       : () => { closeCtxMenu(); openPendingModal(item); };
-    menu.querySelector('#cm-dayof').onclick   = dayofFn;
     menu.querySelector('#cm-pending').onclick = pendingFn;
     menu.querySelector('#cm-toggle').onclick  = toggleFn;
     menu.querySelector('#cm-edit').onclick    = editFn;
@@ -1343,7 +1326,7 @@ function attachItemCtx(li, item, tab) {
     if (tab === 'pack') menu.querySelector('#cm-todo').onclick = todoFn;
     positionMenu(menu, e);
     document.body.appendChild(menu); ctxMenu = menu;
-    _setCtxKeys({ d: dayofFn, p: pendingFn, c: toggleFn, e: editFn, r: removeFn, ...(tab==='pack'?{t:todoFn}:{}) });
+    _setCtxKeys({ p: pendingFn, c: toggleFn, e: editFn, r: removeFn, ...(tab==='pack'?{t:todoFn}:{}) });
   };
   li.addEventListener('contextmenu', handler);
   li.addEventListener('touchstart', e=>{ pressTimer=setTimeout(()=>handler(e),500); },{passive:true});
@@ -1357,26 +1340,16 @@ function attachItemCtx(li, item, tab) {
 let suggestState = { item: null, suggestions: [] };
 
 const TODO_CAT_GENERAL = 'prep_general';
-const TODO_CAT_DAYOF   = 'prep_dayof';
 
 function ensureTodoCats() {
   if (!MASTER_CATS[TODO_CAT_GENERAL]) {
     MASTER_CATS[TODO_CAT_GENERAL] = { id:TODO_CAT_GENERAL, icon:'📋', title:'General Prep', tab:'todo' };
-  }
-  if (!MASTER_CATS[TODO_CAT_DAYOF]) {
-    MASTER_CATS[TODO_CAT_DAYOF] = { id:TODO_CAT_DAYOF, icon:'☀️', title:'Day-of Prep', tab:'todo' };
   }
 }
 
 function getTodoCats() {
   ensureTodoCats();
   return Object.values(MASTER_CATS).filter(c=>c.tab==='todo');
-}
-
-function isItemDayof(itemId) {
-  const builtin = new Set(TRIP_DEFAULTS[currentTrip]?.defaultDayof || []);
-  const custom = new Set(gs(currentTrip, 'packDayof', []));
-  return builtin.has(itemId) || custom.has(itemId);
 }
 
 function populateTodoCatSelect(selectId, newcatFieldId, defaultCatId) {
@@ -1393,16 +1366,11 @@ async function openSuggestModal(item) {
   suggestState = { item, suggestions: [] };
   ensureTodoCats();
 
-  const isDayof = isItemDayof(item.id);
-  const defaultCat = isDayof ? TODO_CAT_DAYOF : TODO_CAT_GENERAL;
-
   document.getElementById('suggest-title').textContent = `To-Do Tasks for "${item.name}"`;
-  document.getElementById('suggest-subtitle').textContent = isDayof
-    ? '☀️ Day-of item — defaulting to Day-of Prep category'
-    : 'General prep item';
+  document.getElementById('suggest-subtitle').textContent = 'General prep item';
   document.getElementById('suggest-list').innerHTML = '<div class="suggest-loading">✨ Generating suggestions…</div>';
   document.getElementById('suggest-custom-input').value = '';
-  populateTodoCatSelect('suggest-cat-select', 'suggest-newcat-input', defaultCat);
+  populateTodoCatSelect('suggest-cat-select', 'suggest-newcat-input', TODO_CAT_GENERAL);
   document.getElementById('suggest-modal').classList.add('visible');
 
   // Call Claude API for suggestions
@@ -1414,7 +1382,7 @@ async function openSuggestModal(item) {
         model: 'claude-sonnet-4-20250514',
         max_tokens: 1000,
         system: 'You are a helpful travel packing assistant. Given a packing list item, suggest 3-6 concise to-do tasks someone should complete before a trip related to that item. Tasks should be specific and actionable — things like "Charge X", "Pack X in carry-on", "Buy replacement Y", "Download Z offline", etc. Return ONLY a JSON array of strings, no markdown, no explanation. Example: ["Charge tablet fully","Download offline maps","Pack tablet charger in carry-on"]',
-        messages: [{ role: 'user', content: `Packing list item: "${item.name}". It is ${isDayof ? 'a day-of item (something that must be packed the morning of departure)' : 'a regular item'}. Suggest to-do tasks.` }]
+        messages: [{ role: 'user', content: `Packing list item: "${item.name}". Suggest to-do tasks.` }]
       })
     });
     const data = await response.json();
@@ -1776,9 +1744,6 @@ function buildDiff() {
   ['pack','todo'].forEach(tab => {
     const activeIds = new Set(getActiveIds(currentTrip, tab));
     const defaultIds = new Set(TRIP_DEFAULTS[currentTrip]?.[tab]||[]);
-    const builtinDayof = new Set(TRIP_DEFAULTS[currentTrip]?.defaultDayof||[]);
-    const customDayof = new Set(gs(currentTrip,tab+'Dayof',[]));
-    const removedDayof = new Set(gs(currentTrip, tab+'DayofRemoved', []));
     const checked = gs(currentTrip,tab+'Checked',{});
 
     [...activeIds].filter(id=>!defaultIds.has(id)).forEach(id=>{
@@ -1795,16 +1760,6 @@ function buildDiff() {
       const item=getItem(id); if(!item)return;
       const gid = getGroupId(item);
       diff.changes.push({type:'checked',tab,cat:groupTitle(tab,gid),catId:gid,item:item.name});
-    });
-    [...customDayof].filter(id=>!builtinDayof.has(id)).forEach(id=>{
-      const item=getItem(id); if(!item)return;
-      const gid = getGroupId(item);
-      diff.changes.push({type:'dayof',tab,cat:groupTitle(tab,gid),catId:gid,item:item.name});
-    });
-    [...builtinDayof].filter(id=>removedDayof.has(id)).forEach(id=>{
-      const item=getItem(id); if(!item)return;
-      const gid = getGroupId(item);
-      diff.changes.push({type:'dayof_removed',tab,cat:groupTitle(tab,gid),catId:gid,item:item.name});
     });
   });
 
@@ -1833,8 +1788,7 @@ function buildDiff() {
   } catch(err) {}
 
   // Raw change log — catches everything else (name edits, cat changes, etc.)
-  const structuredKeys = new Set(['packActive','todoActive','packChecked','todoChecked',
-    'packDayof','todoDayof','packDayofRemoved','todoDayofRemoved']);
+  const structuredKeys = new Set(['packActive','todoActive','packChecked','todoChecked']);
   try {
     const log = JSON.parse(localStorage.getItem('changeLog') || '[]');
     const seenItems = new Set(); // dedupe by item id+name+catId
@@ -1886,14 +1840,12 @@ function openEditsModal() {
   const diff = buildDiff();
   const body = document.getElementById('edits-body');
   const jsonEl = document.getElementById('edits-json');
-  const typeGroups = {added:[],removed:[],checked:[],dayof:[],dayof_removed:[],deleted:[],edited:[],raw:[]};
+  const typeGroups = {added:[],removed:[],checked:[],deleted:[],edited:[],raw:[]};
   diff.changes.forEach(c=>typeGroups[c.type].push(c));
   const typeLabels = {
     added:        {label:'✚ Added',                tag:'added',   tagText:'added'},
     removed:      {label:'✕ Removed from list',    tag:'removed', tagText:'removed'},
     checked:      {label:'☑ Checked',              tag:'checked', tagText:'checked'},
-    dayof:        {label:'☀️ Day-of Flags Added',   tag:'dayof',   tagText:'day-of'},
-    dayof_removed:{label:'☀️ Day-of Flags Removed', tag:'removed', tagText:'dayof-removed'},
     deleted:      {label:'🗑 Permanently Deleted',  tag:'removed', tagText:'deleted'},
     edited:       {label:'✏️ Renamed / Moved',       tag:'added',   tagText:'edited'},
     raw:          {label:'📝 Other Changes',         tag:'added',   tagText:'change'},
@@ -1927,13 +1879,6 @@ function closeEditsModal() { document.getElementById('edits-modal').classList.re
 // ═══════════════════════════════════
 function buildAIContext() {
   const trips = getTripList().map(tripId => {
-    const builtinDayof = new Set(TRIP_DEFAULTS[tripId]?.defaultDayof || []);
-    const customDayof  = new Set(gs(tripId, 'packDayof', []));
-    const removedDayof = new Set(gs(tripId, 'packDayofRemoved', []));
-    const effectiveDayof = [
-      ...[...builtinDayof].filter(id => !removedDayof.has(id)),
-      ...[...customDayof].filter(id => !builtinDayof.has(id))
-    ];
     const packChecked = gs(tripId, 'packChecked', {});
     const todoChecked = gs(tripId, 'todoChecked', {});
     return {
@@ -1941,14 +1886,13 @@ function buildAIContext() {
       name: getTripName(tripId),
       packActive: getActiveIds(tripId, 'pack'),
       todoActive: getActiveIds(tripId, 'todo'),
-      packDayof: effectiveDayof,
       packChecked: Object.keys(packChecked).filter(id => packChecked[id]),
       todoChecked: Object.keys(todoChecked).filter(id => todoChecked[id])
     };
   });
 
   return {
-    _instructions: `You are helping modify a personal trip packing list app. The user is currently viewing the trip: "${getTripName(currentTrip)}" (id: "${currentTrip}"). When the user says "my list", "this trip", or refers to a trip without naming it, assume they mean this one. 'items' is the master library — each item has an id, name, tab (pack|todo). Pack items use 'containerId' pointing into 'containers' (a tree via parentId — null/omitted parentId means top-level; 'c_loose' is the fallback container for uncontained items). Todo items use 'catId' pointing into 'categories' (flat, no nesting). Each trip has packActive/todoActive arrays of item IDs currently on that list, packDayof for items flagged to pack the morning of departure, and packChecked/todoChecked arrays of item IDs already packed/done. Use the ops in _patch_spec to express any changes the user requests. IMPORTANT: always reference items by their existing id — only use add_item for genuinely new items. Return ONLY a valid patch JSON object (spec + version + ops array), no explanation or markdown.`,
+    _instructions: `You are helping modify a personal trip packing list app. The user is currently viewing the trip: "${getTripName(currentTrip)}" (id: "${currentTrip}"). When the user says "my list", "this trip", or refers to a trip without naming it, assume they mean this one. 'items' is the master library — each item has an id, name, tab (pack|todo). Pack items use 'containerId' pointing into 'containers' (a tree via parentId — null/omitted parentId means top-level; 'c_loose' is the fallback container for uncontained items). Todo items use 'catId' pointing into 'categories' (flat, no nesting). Each trip has packActive/todoActive arrays of item IDs currently on that list, and packChecked/todoChecked arrays of item IDs already packed/done. Use the ops in _patch_spec to express any changes the user requests. IMPORTANT: always reference items by their existing id — only use add_item for genuinely new items. Return ONLY a valid patch JSON object (spec + version + ops array), no explanation or markdown.`,
     _patch_spec: {
       format: { spec: "trip-planner-patch", version: "1.0", ops: [] },
       ops: {
@@ -1958,14 +1902,13 @@ function buildAIContext() {
         delete_item:      { id: "item id — permanently removes from library and all trips" },
         rename_item:      { id: "item id", newName: "string" },
         move_item:        { id: "item id", newContainerId: "(pack items) container id", newCatId: "(todo items) category id" },
-        set_dayof:        { id: "item id", trip: "trip id", value: "boolean" },
         add_container:    { id: "string slug", icon: "(optional) emoji", name: "string", parentId: "(optional) container id, omit/null for top-level" },
         rename_container: { id: "container id", newName: "(optional) string", newIcon: "(optional) emoji", newParentId: "(optional) container id, or null for top-level" },
         delete_container: { id: "container id — children (items and sub-containers) move up to this container's own parent" },
         add_cat:      { id: "string slug", icon: "emoji", title: "string", tab: "pack|todo" },
         rename_cat:   { id: "category id", newTitle: "(optional) string", newIcon: "(optional) emoji" },
         delete_cat:   { id: "category id — items move to uncategorized" },
-        add_trip:     { id: "string slug", name: "string", pack: "(optional) array of item IDs", todo: "(optional) array of item IDs", defaultDayof: "(optional) array of item IDs" },
+        add_trip:     { id: "string slug", name: "string", pack: "(optional) array of item IDs", todo: "(optional) array of item IDs" },
         rename_trip:  { id: "trip id", newName: "string" },
         delete_trip:  { id: "trip id" },
         set_active:   { trip: "trip id", tab: "pack|todo", ids: "array of item IDs — replaces entire active list" },
@@ -2230,10 +2173,6 @@ async function loadUserData(userId) {
         set('todoActive',        s.todo_active);
         set('packChecked',       s.pack_checked);
         set('todoChecked',       s.todo_checked);
-        set('packDayof',         s.pack_dayof);
-        set('todoDayof',         s.todo_dayof);
-        set('packDayofRemoved',  s.pack_dayof_removed);
-        set('todoDayofRemoved',  s.todo_dayof_removed);
         set('packPending',       s.pack_pending);
       });
     }
@@ -2290,10 +2229,6 @@ async function pushAllToSupabase(userId) {
           todo_active:        ga('todoActive'),
           pack_checked:       ga('packChecked')       || {},
           todo_checked:       ga('todoChecked')       || {},
-          pack_dayof:         ga('packDayof')         || [],
-          todo_dayof:         ga('todoDayof')         || [],
-          pack_dayof_removed: ga('packDayofRemoved')  || [],
-          todo_dayof_removed: ga('todoDayofRemoved')  || [],
           pack_pending:       ga('packPending')       || {}
         };
       });
@@ -2330,10 +2265,6 @@ async function _flushTripState(tripId) {
       todo_active:        ga('todoActive'),
       pack_checked:       ga('packChecked')       || {},
       todo_checked:       ga('todoChecked')       || {},
-      pack_dayof:         ga('packDayof')         || [],
-      todo_dayof:         ga('todoDayof')         || [],
-      pack_dayof_removed: ga('packDayofRemoved')  || [],
-      todo_dayof_removed: ga('todoDayofRemoved')  || [],
       pack_pending:       ga('packPending')       || {},
       updated_at:         new Date().toISOString()
     });
@@ -2614,6 +2545,8 @@ function openPendingModal(item) {
   document.getElementById('pending-cat-row').style.display = 'flex';
   document.getElementById('pending-clear-btn').style.display = 'none';
   document.getElementById('pending-submit-btn').textContent = 'Link →';
+  document.getElementById('pending-alsodefault-row').style.display = 'block';
+  document.getElementById('pending-also-default').checked = false;
 
   populateTodoCatSelect('pending-cat-select', 'pending-newcat-input', TODO_CAT_GENERAL);
   document.getElementById('pending-new-task').value = '';
@@ -2639,6 +2572,7 @@ function openDefaultPendingModal(item) {
   document.getElementById('pending-cat-row').style.display = 'none';
   document.getElementById('pending-clear-btn').style.display = item.defaultPendingTask ? 'inline-block' : 'none';
   document.getElementById('pending-submit-btn').textContent = 'Set →';
+  document.getElementById('pending-alsodefault-row').style.display = 'none';
 
   document.getElementById('pending-new-task').value = '';
 
@@ -2684,13 +2618,25 @@ function submitPendingModal() {
     if (master) {
       master.defaultPendingTask = taskName;
       saveMasterItems();
+      // If this item is already on the current trip's pack list, sync its pending
+      // link to the newly-assigned default right away — not just for future adds.
+      if (getActiveIds(currentTrip, 'pack').includes(master.id)) {
+        addTodoItem(taskName, TODO_CAT_GENERAL);
+        const todo = MASTER_ITEMS.find(i => i.name.toLowerCase() === taskName.toLowerCase() && i.tab === 'todo');
+        if (todo) {
+          const pending = getPending(currentTrip);
+          pending[master.id] = todo.id;
+          savePending(currentTrip, pending);
+        }
+      }
     }
     closeAllModals();
     if (master) openEditModal(master, 'pack', getItemContainerId(master));
+    renderTab('pack');
     return;
   }
 
-  let todoId = null;
+  let todoId = null, taskNameResolved = null;
   if (newTaskName) {
     let catId = document.getElementById('pending-cat-select').value;
     if (catId === '__new__') {
@@ -2702,15 +2648,22 @@ function submitPendingModal() {
     }
     addTodoItem(newTaskName, catId);
     const newTodo = MASTER_ITEMS.find(i => i.name.toLowerCase() === newTaskName.toLowerCase() && i.tab === 'todo');
-    if (newTodo) todoId = newTodo.id;
+    if (newTodo) { todoId = newTodo.id; taskNameResolved = newTodo.name; }
   } else if (selectedRadio) {
     todoId = selectedRadio.value;
+    const todo = getItem(todoId);
+    taskNameResolved = todo ? todo.name : null;
   }
 
   if (todoId) {
     const pending = getPending(currentTrip);
     pending[item.id] = todoId;
     savePending(currentTrip, pending);
+  }
+
+  if (todoId && taskNameResolved && document.getElementById('pending-also-default').checked) {
+    const master = MASTER_ITEMS.find(i => i.id === item.id);
+    if (master) { master.defaultPendingTask = taskNameResolved; saveMasterItems(); }
   }
 
   closeAllModals();
@@ -2747,7 +2700,7 @@ function renderDuplicatesBody() {
     return;
   }
   body.innerHTML = `<p style="font-size:0.82rem;color:var(--muted);line-height:1.5;margin-bottom:0.9rem">
-    These items have very similar names. Pick which one to keep — the others will be merged into it across every trip (active lists, checked status, day-of flags, and pending links), then removed from the library.</p>`
+    These items have very similar names. Pick which one to keep — the others will be merged into it across every trip (active lists, checked status, and pending links), then removed from the library.</p>`
     + groups.map((g, gi) => `
       <div class="dup-group" style="margin-bottom:1.1rem;padding-bottom:1.1rem;border-bottom:1px dotted var(--line)">
         <div style="font-size:0.7rem;color:var(--muted);margin-bottom:0.4rem;text-transform:uppercase;letter-spacing:0.07em">${g[0].tab === 'pack' ? '📦 Pack' : '📋 To-do'} · ${g.length} similar items</div>
@@ -2776,7 +2729,7 @@ function mergeDuplicateGroup(gi) {
   renderDuplicatesBody();
 }
 
-// Repoints every reference to `removeIds` (active lists, checked maps, day-of flags,
+// Repoints every reference to `removeIds` (active lists, checked maps,
 // pending links — as both waiter and waited-on) to `survivorId`, then deletes them from the library.
 function mergeItemsInto(survivorId, removeIds) {
   const removeSet = new Set(removeIds);
@@ -2801,12 +2754,6 @@ function mergeItemsInto(survivorId, removeIds) {
         }
       });
       if (checkedChanged) ss(tripId, tab+'Checked', checked);
-
-      const dayof = gs(tripId, tab+'Dayof', []);
-      if (dayof.some(id => removeSet.has(id))) ss(tripId, tab+'Dayof', dedupe(dayof));
-
-      const dayofRemoved = gs(tripId, tab+'DayofRemoved', []);
-      if (dayofRemoved.some(id => removeSet.has(id))) ss(tripId, tab+'DayofRemoved', dedupe(dayofRemoved));
     });
 
     const pending = getPending(tripId);
@@ -2946,7 +2893,6 @@ function applyPatch(patch) {
         case 'delete_item':   _patchDeleteItem(op); break;
         case 'rename_item':   _patchRenameItem(op); break;
         case 'move_item':     _patchMoveItem(op); break;
-        case 'set_dayof':     _patchSetDayof(op); break;
         case 'add_cat':       _patchAddCat(op); break;
         case 'rename_cat':    _patchRenameCat(op); break;
         case 'delete_cat':    _patchDeleteCat(op); break;
@@ -3043,23 +2989,6 @@ function _patchMoveItem(op) {
   else item.catId = op.newCatId;
 }
 
-function _patchSetDayof(op) {
-  const item = getItem(op.id);
-  if (!item) { console.warn('applyPatch set_dayof: unknown id', op.id); return; }
-  const dayofKey = item.tab + 'Dayof', removedKey = item.tab + 'DayofRemoved';
-  const builtinDayof = new Set(TRIP_DEFAULTS[op.trip]?.defaultDayof || []);
-  const d = new Set(gs(op.trip, dayofKey, []));
-  const rem = new Set(gs(op.trip, removedKey, []));
-  if (op.value) {
-    d.add(op.id); rem.delete(op.id);
-  } else {
-    d.delete(op.id);
-    if (builtinDayof.has(op.id)) rem.add(op.id);
-  }
-  ss(op.trip, dayofKey, [...d]);
-  ss(op.trip, removedKey, [...rem]);
-}
-
 function _patchAddCat(op) {
   if (!MASTER_CATS[op.id]) {
     MASTER_CATS[op.id] = { id:op.id, icon:op.icon||'📌', title:op.title, tab:op.tab||'pack' };
@@ -3112,7 +3041,6 @@ function _patchAddTrip(op) {
   ss(op.id, 'name', op.name || op.id);
   if (op.pack) setActiveIds(op.id, 'pack', op.pack);
   if (op.todo) setActiveIds(op.id, 'todo', op.todo);
-  if (op.defaultDayof) ss(op.id, 'packDayof', op.defaultDayof);
   trips.push(op.id);
   saveTripList(trips);
   return true;
