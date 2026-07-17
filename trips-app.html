@@ -63,6 +63,9 @@ body{background:var(--paper);color:var(--ink);font-family:'DM Sans',sans-serif;m
 .container-node .container-node .cat-icon{font-size:0.85rem;}
 .container-li{display:block;border-bottom:none;padding:0.3rem 0 0.1rem;cursor:default;}
 .container-li:hover{background:none;}
+/* Sibling <li> items have 0.2rem horizontal padding; nested container headers had none,
+   so their checkbox sat ~3px left of sibling items' checkboxes. Match it. */
+.container-li .container-header{padding:0 0.2rem;}
 
 /* List items */
 ul{list-style:none;border-left:1.5px solid var(--line);padding-left:1rem;}
@@ -119,6 +122,8 @@ li.pending.checked .item-text{color:var(--muted);}
 .pool-cat-header{display:flex;align-items:center;gap:0.4rem;margin-bottom:0.5rem;}
 .pool-cat-icon{font-size:0.85rem;}
 .pool-cat-title{font-size:0.78rem;font-weight:500;color:var(--muted);letter-spacing:0.06em;text-transform:uppercase;}
+.pool-addall-btn{margin-left:auto;font-size:0.65rem;font-weight:500;color:var(--muted);background:none;border:1px solid var(--line);border-radius:3px;padding:0.12rem 0.4rem;cursor:pointer;transition:border-color 0.15s,color 0.15s;flex-shrink:0;}
+.pool-addall-btn:hover{border-color:var(--accent);color:var(--accent);}
 .pool-ul{list-style:none;border-left:1.5px dashed var(--pool-border);padding-left:0.9rem;}
 .pool-li{font-size:0.84rem;font-weight:300;color:var(--muted);padding:0.25rem 0.2rem;border-bottom:1px dotted var(--pool-border);display:flex;align-items:center;gap:0.5rem;cursor:default;border-radius:3px;transition:background 0.15s;user-select:none;}
 .pool-li:last-child{border-bottom:none;}
@@ -212,15 +217,22 @@ li.pending.checked .item-text{color:var(--muted);}
 .suggest-cat-row select:focus{border-color:var(--accent);}
 .suggest-newcat-input{width:100%;font-family:'DM Sans',sans-serif;font-size:0.85rem;background:none;border:none;border-bottom:1px solid var(--accent);outline:none;color:var(--ink);padding:0.2rem 0;margin-top:0.5rem;display:none;}
 
-/* Patch button & modal */
-.patch-btn{position:fixed;bottom:1.2rem;left:1.2rem;z-index:500;font-family:'DM Sans',sans-serif;font-size:0.75rem;background:var(--paper);color:var(--muted);border:1.5px solid var(--line);border-radius:4px;padding:0.3rem 0.65rem;cursor:pointer;letter-spacing:0.05em;transition:border-color 0.15s,color 0.15s;box-shadow:0 2px 8px rgba(0,0,0,0.08);}
-.patch-btn:hover{border-color:var(--accent);color:var(--accent);}
-.patch-modal-box{background:var(--paper);border-radius:8px;padding:1.5rem;width:100%;max-width:520px;box-shadow:0 8px 32px rgba(0,0,0,0.2);}
-.patch-modal-box h2{font-family:'Playfair Display',serif;font-size:1.15rem;margin-bottom:1rem;border-bottom:1.5px solid var(--ink);padding-bottom:0.7rem;}
-.patch-textarea{width:100%;min-height:160px;font-family:monospace;font-size:0.73rem;background:rgba(0,0,0,0.03);border:1px solid var(--line);border-radius:4px;padding:0.7rem;color:var(--ink);resize:vertical;outline:none;transition:border-color 0.15s;}
-.patch-textarea:focus{border-color:var(--accent);}
-.patch-preview{margin-top:0.6rem;font-size:0.78rem;color:var(--muted);min-height:1.4em;}
-.patch-error{font-size:0.78rem;color:var(--accent);min-height:1.2em;}
+/* Color palette (edit-task modal) */
+.color-palette{display:flex;flex-wrap:wrap;gap:0.5rem;margin-top:0.3rem;}
+.color-swatch{width:22px;height:22px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0;box-shadow:inset 0 0 0 1px rgba(0,0,0,0.1);transition:transform 0.1s,border-color 0.1s;}
+.color-swatch:hover{transform:scale(1.12);}
+.color-swatch.selected{border-color:var(--ink);}
+.color-swatch.auto{background:var(--paper);color:var(--muted);font-size:0.65rem;font-weight:600;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1.5px var(--line);}
+.color-swatch.auto.selected{border-color:var(--ink);}
+
+/* Inline tooltip (copy/paste JSON feedback) */
+.inline-tooltip{position:fixed;z-index:9999;font-family:'DM Sans',sans-serif;background:var(--ink);color:var(--paper);font-size:0.72rem;padding:0.3rem 0.6rem;border-radius:4px;opacity:0;transform:translateY(-4px);transition:opacity 0.15s,transform 0.15s;pointer-events:none;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.15);}
+.inline-tooltip.visible{opacity:1;transform:translateY(0);}
+.inline-tooltip.error{background:var(--accent);}
+
+/* Pulsing highlight for items just changed by a pasted patch */
+@keyframes patchPulse{0%,100%{box-shadow:0 0 0 0 rgba(193,68,14,0);}50%{box-shadow:0 0 0 4px rgba(193,68,14,0.35);}}
+.patch-pulse{animation:patchPulse 0.6s ease-in-out 3;border-radius:4px;}
 
 /* Auth overlay */
 .auth-overlay{position:fixed;inset:0;background:var(--paper);z-index:9000;display:flex;align-items:center;justify-content:center;padding:1.5rem;}
@@ -291,7 +303,8 @@ li.pending.checked .item-text{color:var(--muted);}
     <h1>✈️</h1>
     <select class="trip-select" id="trip-select" onchange="switchTrip(this.value)"></select>
     <button class="top-btn green" onclick="openEditsModal()">Edits</button>
-    <button class="top-btn" onclick="openAIContextModal()">AI</button>
+    <button class="top-btn" id="copy-json-btn" onclick="copyJsonContext()">Copy JSON</button>
+    <button class="top-btn" id="paste-json-btn" onclick="pasteJsonPatch()">Paste JSON</button>
     <button class="top-btn ml-auto" onclick="openNewTripModal()">+ New Trip</button>
     <div class="profile-wrap" id="profile-wrap">
       <button class="profile-btn" id="profile-btn" onclick="toggleProfileMenu(event)" title="Account">
@@ -450,6 +463,11 @@ li.pending.checked .item-text{color:var(--muted);}
       <label>New Category Name</label>
       <input id="edit-todo-newcat" type="text" placeholder="e.g. Errands">
     </div>
+    <div class="modal-field">
+      <label>Highlight Color</label>
+      <div class="color-palette" id="edit-todo-color-palette"></div>
+      <p class="suggest-subtitle" style="margin-top:0.3rem">Used to highlight this task and any packing items waiting on it. "Auto" picks a consistent color based on the task itself.</p>
+    </div>
     <div class="modal-btns">
       <button class="btn danger" onclick="openConfirmDeleteTodo()">🗑 Delete Permanently</button>
       <div class="right">
@@ -512,27 +530,6 @@ li.pending.checked .item-text{color:var(--muted);}
   </div>
 </div>
 
-<!-- AI Context modal -->
-<div class="edits-overlay" id="ai-context-modal">
-  <div class="edits-modal">
-    <div class="edits-modal-header">
-      <h2>AI Context</h2>
-      <button class="edits-modal-close" onclick="closeAIContextModal()">✕</button>
-    </div>
-    <div class="edits-body" style="flex-shrink:0">
-      <p style="font-size:0.82rem;color:var(--muted);line-height:1.5;margin-bottom:0.7rem">Paste this into a Claude conversation, then describe your changes in plain English. Claude will return a patch JSON to paste into the <strong>{ }</strong> button.</p>
-      <div id="ai-context-stats" style="font-size:0.72rem;color:var(--muted);letter-spacing:0.07em;text-transform:uppercase"></div>
-    </div>
-    <div class="edits-json-wrap" style="margin-top:0.8rem">
-      <div class="edits-json-label">
-        <span>Context JSON</span>
-        <button class="copy-btn" id="ai-copy-btn" onclick="copyAIContext()">Copy</button>
-      </div>
-      <div class="edits-json" id="ai-context-json"></div>
-    </div>
-  </div>
-</div>
-
 <!-- Find & merge duplicates modal -->
 <div class="edits-overlay" id="duplicates-modal">
   <div class="edits-modal">
@@ -573,25 +570,6 @@ li.pending.checked .item-text{color:var(--muted);}
         <button class="btn primary" id="pending-submit-btn" onclick="submitPendingModal()">Link →</button>
       </div>
     </div>
-  </div>
-</div>
-
-<!-- Patch button -->
-<button class="patch-btn" onclick="openPatchModal()">{ }</button>
-
-<!-- Patch modal -->
-<div class="overlay" id="patch-modal" style="align-items:flex-start;padding-top:2.5rem">
-  <div class="patch-modal-box">
-    <h2>Apply Patch</h2>
-    <textarea class="patch-textarea" id="patch-textarea"
-      placeholder='{"spec":"trip-planner-patch","version":"1.0","ops":[]}'
-      oninput="updatePatchPreview()"></textarea>
-    <div class="patch-preview" id="patch-preview"></div>
-    <div class="patch-error" id="patch-error"></div>
-    <div class="modal-btns" style="margin-top:1rem"><div class="right">
-      <button class="btn" onclick="closeAllModals()">Cancel</button>
-      <button class="btn primary" onclick="confirmApplyPatch()">Apply</button>
-    </div></div>
   </div>
 </div>
 
@@ -969,7 +947,11 @@ function renderTodoTab() {
   const tab = 'todo';
   const activeIds = new Set(getActiveIds(currentTrip, tab));
   const checked = gs(currentTrip, tab+'Checked', {});
+  // Todo items that are the target of some pack item's "waiting on" link get the same
+  // highlight color as those pack items, so it's clear which task is blocking what.
+  // Self-mapping (id -> id) reuses buildActiveLi's existing pending-color logic.
   const pending = {};
+  new Set(Object.values(getPending(currentTrip))).forEach(id => { pending[id] = id; });
 
   // Active items grouped by cat
   const gridEl = document.getElementById('todo-grid');
@@ -1082,6 +1064,7 @@ function buildContainerNode(container, depth, activeIds, checked, pending) {
 
   const wrap = document.createElement('div');
   wrap.className = `category container-node depth-${depth}`;
+  wrap.dataset.containerId = container.id;
 
   const state = containerCheckState(activeLeafIds, checked);
   const header = document.createElement('div');
@@ -1137,6 +1120,8 @@ function buildContainerNode(container, depth, activeIds, checked, pending) {
 // deterministic per todo item id so the same task always renders the same color.
 const PENDING_COLORS = ['#1971c2','#7048e8','#0ca678','#e64980','#4263eb','#1098ad','#862e9c','#495057'];
 function pendingColorFor(todoId) {
+  const todo = getItem(todoId);
+  if (todo && todo.pendingColor) return todo.pendingColor;
   let hash = 0;
   for (let i=0; i<todoId.length; i++) hash = (hash*31 + todoId.charCodeAt(i)) >>> 0;
   return PENDING_COLORS[hash % PENDING_COLORS.length];
@@ -1148,6 +1133,7 @@ function _hexToRgba(hex, alpha) {
 
 function buildActiveLi(item, tab, checked, pending) {
   const li = document.createElement('li');
+  li.dataset.itemId = item.id;
   const isChecked = !!checked[item.id];
   const pendingTodoId = pending?.[item.id];
   if (isChecked) li.classList.add('checked');
@@ -1158,9 +1144,11 @@ function buildActiveLi(item, tab, checked, pending) {
     li.style.setProperty('--pending-item-color', color);
     li.style.setProperty('--pending-item-bg', _hexToRgba(color, 0.07));
     li.style.setProperty('--pending-item-badge-bg', _hexToRgba(color, 0.12));
-    const todoItem = getItem(pendingTodoId);
-    const taskName = todoItem ? todoItem.name : '?';
-    pendingBadge = `<span class="pending-badge" title="Waiting on: ${taskName}">⏳ ${taskName}</span>`;
+    if (tab === 'pack') {
+      const todoItem = getItem(pendingTodoId);
+      const taskName = todoItem ? todoItem.name : '?';
+      pendingBadge = `<span class="pending-badge" title="Waiting on: ${taskName}">⏳ ${taskName}</span>`;
+    }
   }
   li.innerHTML = `<span class="cb"></span><span class="item-text">${item.name}</span>${pendingBadge}`;
   li.onclick = e => { if (!e.target.classList.contains('del-btn')) toggleItem(item.id, tab); };
@@ -1201,6 +1189,14 @@ function renderPool(tab) {
     const hdr = document.createElement('div');
     hdr.className = 'pool-cat-header';
     hdr.innerHTML = `<span class="pool-cat-icon">${icon||''}</span><span class="pool-cat-title">${title}</span>`;
+    if (tab === 'pack') {
+      const addAllBtn = document.createElement('button');
+      addAllBtn.className = 'pool-addall-btn';
+      addAllBtn.textContent = '+ Add all';
+      addAllBtn.title = `Add every item in ${title} to this trip`;
+      addAllBtn.onclick = () => addContainerToTrip(groupId);
+      hdr.appendChild(addAllBtn);
+    }
     catEl.appendChild(hdr);
 
     const ul = document.createElement('ul');
@@ -1280,6 +1276,18 @@ function addItemToTrip(itemId, tab) {
     if (tab === 'pack') applyDefaultPendingTask(itemId);
   }
   renderTab(tab);
+}
+
+// Adds every item in a container's subtree (including sub-containers, recursively)
+// to the current trip's pack list in one batched write + render.
+function addContainerToTrip(containerId) {
+  const ids = getActiveIds(currentTrip, 'pack');
+  const idSet = new Set(ids);
+  const newIds = collectLeafIds(containerId).filter(id => !idSet.has(id));
+  if (!newIds.length) return;
+  setActiveIds(currentTrip, 'pack', [...ids, ...newIds]);
+  newIds.forEach(applyDefaultPendingTask);
+  renderTab('pack');
 }
 
 function removeItemFromTrip(itemId, tab) {
@@ -1465,13 +1473,32 @@ function addTodoItem(name, catId) {
 let editTodoState = {};
 
 function openEditTodoModal(item) {
-  editTodoState = { item };
+  editTodoState = { item, selectedColor: item.pendingColor || null };
   document.getElementById('edit-todo-name').value = item.name;
   populateTodoCatSelect('edit-todo-cat', 'edit-todo-newcat-field', item.catId);
   // Wire the onchange for this select specifically
   document.getElementById('edit-todo-cat').onchange = onEditTodoCatChange;
+  renderColorPalette(item.pendingColor || null);
   document.getElementById('edit-todo-modal').classList.add('visible');
   setTimeout(()=>document.getElementById('edit-todo-name').focus(), 50);
+}
+
+// Swatch picker for a todo task's pending-highlight color — "Auto" (null) falls back
+// to pendingColorFor()'s hash-based color.
+function renderColorPalette(selectedColor) {
+  const wrap = document.getElementById('edit-todo-color-palette');
+  const autoBtn = `<button type="button" class="color-swatch auto${!selectedColor?' selected':''}" data-color="" title="Auto">A</button>`;
+  const swatches = PENDING_COLORS.map(c =>
+    `<button type="button" class="color-swatch${selectedColor===c?' selected':''}" data-color="${c}" style="background:${c}" title="${c}"></button>`
+  ).join('');
+  wrap.innerHTML = autoBtn + swatches;
+  wrap.querySelectorAll('.color-swatch').forEach(btn => {
+    btn.onclick = () => {
+      editTodoState.selectedColor = btn.dataset.color || null;
+      wrap.querySelectorAll('.color-swatch').forEach(b=>b.classList.remove('selected'));
+      btn.classList.add('selected');
+    };
+  });
 }
 
 function onEditTodoCatChange() {
@@ -1497,10 +1524,12 @@ function saveTodoEdit() {
     logEdit({ id: item.id, oldName: item.name, newName, oldCatId: item.catId, newCatId, tab: 'todo' });
     item.name = newName;
     item.catId = newCatId;
+    if (editTodoState.selectedColor) item.pendingColor = editTodoState.selectedColor;
+    else delete item.pendingColor;
   }
   saveMasterItems();
   closeAllModals();
-  renderTab('todo');
+  renderAll();
 }
 
 function openConfirmDeleteTodo() {
@@ -1928,31 +1957,111 @@ function buildAIContext() {
   };
 }
 
-function openAIContextModal() {
-  const ctx  = buildAIContext();
-  const json = JSON.stringify(ctx, null, 2);
-  document.getElementById('ai-context-json').textContent = json;
-  document.getElementById('ai-context-stats').textContent =
-    `${ctx.items.length} items · ${ctx.categories.length} categories · ${ctx.containers.length} containers · ${ctx.trips.length} trip${ctx.trips.length !== 1 ? 's' : ''}`;
-  document.getElementById('ai-copy-btn').textContent = 'Copy';
-  document.getElementById('ai-copy-btn').classList.remove('copied');
-  document.getElementById('ai-context-modal').classList.add('visible');
+// Small fixed-position bubble anchored under a button — used for copy/paste feedback
+// instead of a blocking modal.
+function showTooltip(anchorEl, text, isError) {
+  const tip = document.createElement('div');
+  tip.className = 'inline-tooltip' + (isError ? ' error' : '');
+  tip.textContent = text;
+  document.body.appendChild(tip);
+  const rect = anchorEl.getBoundingClientRect();
+  tip.style.left = Math.max(4, rect.left + rect.width/2 - tip.offsetWidth/2) + 'px';
+  tip.style.top = (rect.bottom + 8) + 'px';
+  requestAnimationFrame(() => tip.classList.add('visible'));
+  setTimeout(() => {
+    tip.classList.remove('visible');
+    setTimeout(() => tip.remove(), 200);
+  }, 1800);
 }
 
-function closeAIContextModal() { document.getElementById('ai-context-modal').classList.remove('visible'); }
-function copyAIContext() {
-  const json = document.getElementById('ai-context-json').textContent;
-  const btn  = document.getElementById('ai-copy-btn');
+function copyJsonContext() {
+  const btn = document.getElementById('copy-json-btn');
+  const json = JSON.stringify(buildAIContext(), null, 2);
   if (navigator.clipboard && window.isSecureContext) {
-    navigator.clipboard.writeText(json).then(() => {
-      btn.textContent = 'Copied!'; btn.classList.add('copied');
-      setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
-    }).catch(() => fallbackCopy(json, btn));
-  } else { fallbackCopy(json, btn); }
+    navigator.clipboard.writeText(json)
+      .then(() => showTooltip(btn, 'JSON copied to clipboard', false))
+      .catch(() => showTooltip(btn, 'Could not copy — clipboard blocked', true));
+  } else {
+    showTooltip(btn, 'Clipboard unavailable in this browser', true);
+  }
 }
-document.getElementById('ai-context-modal').addEventListener('click', e => {
-  if (e.target === document.getElementById('ai-context-modal')) closeAIContextModal();
-});
+
+// Item/container ids touched by a patch's ops, so we know what to pulse-highlight
+// after applying it. Only covers ops that map cleanly to a single visible row —
+// structural ops (add_trip, rename_cat, etc.) aren't highlighted.
+function _collectPatchTouchedIds(ops) {
+  const itemIds = new Set(), containerIds = new Set();
+  ops.forEach(op => {
+    switch (op.op) {
+      case 'add_item': {
+        const name = (op.name || '').toLowerCase();
+        const item = MASTER_ITEMS.find(i => i.name.toLowerCase() === name);
+        if (item) itemIds.add(item.id);
+        break;
+      }
+      case 'update_item':
+      case 'rename_item':
+      case 'move_item':
+        if (op.id) itemIds.add(op.id);
+        break;
+      case 'set_active':
+      case 'set_checked':
+        (op.ids || []).forEach(id => itemIds.add(id));
+        break;
+      case 'add_container':
+        if (op.id) containerIds.add(op.id);
+        break;
+      case 'rename_container':
+        if (op.id) containerIds.add(op.id);
+        break;
+    }
+  });
+  return { itemIds, containerIds };
+}
+
+function pulseAffectedItems(ops) {
+  const { itemIds, containerIds } = _collectPatchTouchedIds(ops);
+  if (!itemIds.size && !containerIds.size) return;
+  document.querySelectorAll('li[data-item-id]').forEach(li => {
+    if (itemIds.has(li.dataset.itemId)) {
+      li.classList.add('patch-pulse');
+      setTimeout(() => li.classList.remove('patch-pulse'), 1900);
+    }
+  });
+  document.querySelectorAll('.container-node[data-container-id]').forEach(node => {
+    if (containerIds.has(node.dataset.containerId)) {
+      const header = node.querySelector('.container-header');
+      if (header) {
+        header.classList.add('patch-pulse');
+        setTimeout(() => header.classList.remove('patch-pulse'), 1900);
+      }
+    }
+  });
+}
+
+async function pasteJsonPatch() {
+  const btn = document.getElementById('paste-json-btn');
+  let text;
+  try {
+    text = await navigator.clipboard.readText();
+  } catch (e) {
+    showTooltip(btn, 'Could not read clipboard', true);
+    return;
+  }
+  let patch;
+  try {
+    patch = JSON.parse((text || '').trim());
+  } catch (e) {
+    showTooltip(btn, 'Clipboard is not valid JSON', true);
+    return;
+  }
+  const result = applyPatch(patch);
+  if (result.error) {
+    showTooltip(btn, result.error, true);
+    return;
+  }
+  pulseAffectedItems(Array.isArray(patch.ops) ? patch.ops : []);
+}
 
 function copyEditsJson() {
   const json = document.getElementById('edits-json').textContent;
@@ -2137,7 +2246,8 @@ async function loadUserData(userId) {
         items.map(r => ({ id:r.id, name:r.name, tab:r.tab,
           ...(r.tab === 'pack' ? { containerId: r.container_id, order: r.order_index } : { catId: r.cat_id }),
           ...(r.subcat_label ? { subcatLabel: r.subcat_label } : {}),
-          ...(r.default_pending_task ? { defaultPendingTask: r.default_pending_task } : {}) }))
+          ...(r.default_pending_task ? { defaultPendingTask: r.default_pending_task } : {}),
+          ...(r.pending_color ? { pendingColor: r.pending_color } : {}) }))
       ));
     }
 
@@ -2204,7 +2314,8 @@ async function pushAllToSupabase(userId) {
       await sb.from('master_items').upsert(
         items.map(i => ({ user_id:userId, id:i.id, name:i.name, tab:i.tab,
           cat_id:i.catId||null, container_id:i.containerId||null, order_index:i.order||null,
-          subcat_label:i.subcatLabel||null, default_pending_task:i.defaultPendingTask||null }))
+          subcat_label:i.subcatLabel||null, default_pending_task:i.defaultPendingTask||null,
+          pending_color:i.pendingColor||null }))
       );
     }
     const cats = JSON.parse(localStorage.getItem('masterCats') || 'null');
@@ -2321,7 +2432,8 @@ async function syncMasterItemsToSupabase() {
       await sb.from('master_items').insert(
         MASTER_ITEMS.map(i => ({ user_id:currentUserId, id:i.id, name:i.name, tab:i.tab,
           cat_id:i.catId||null, container_id:i.containerId||null, order_index:i.order||null,
-          subcat_label:i.subcatLabel||null, default_pending_task:i.defaultPendingTask||null }))
+          subcat_label:i.subcatLabel||null, default_pending_task:i.defaultPendingTask||null,
+          pending_color:i.pendingColor||null }))
       );
     }
   } catch(e) { console.error('Master items sync error:', e); }
@@ -2424,6 +2536,7 @@ function init() {
   const savedCats = getMasterCats();
   if (savedCats) savedCats.forEach(c=>{ if(!MASTER_CATS[c.id]) MASTER_CATS[c.id]=c; });
   ensureLooseContainer();
+  ensureTodoCats();
 
   if (isReset) {
     localStorage.setItem('masterLibraryVersion', String(MASTER_LIBRARY_VERSION));
@@ -2586,6 +2699,7 @@ function openPendingModal(item) {
   _renderPendingRadioOptions(
     todoIds.map(id => getItem(id)).filter(Boolean)
       .map(t => ({ value: t.id, label: t.name, selected: t.id === linkedTodoId }))
+      .sort((a,b) => a.label.localeCompare(b.label))
   );
 
   document.getElementById('pending-modal').classList.add('visible');
@@ -2610,7 +2724,8 @@ function openDefaultPendingModal(item) {
   const seen = new Set();
   const opts = MASTER_ITEMS
     .filter(i => i.tab === 'todo' && !seen.has(i.name.toLowerCase()) && seen.add(i.name.toLowerCase()))
-    .map(t => ({ value: t.name, label: t.name, selected: !!current && t.name.toLowerCase() === current }));
+    .map(t => ({ value: t.name, label: t.name, selected: !!current && t.name.toLowerCase() === current }))
+    .sort((a,b) => a.label.localeCompare(b.label));
   _renderPendingRadioOptions(opts);
 
   document.getElementById('pending-modal').classList.add('visible');
@@ -2862,50 +2977,6 @@ async function submitPasswordReset() {
 // ═══════════════════════════════════
 // PATCH SYSTEM
 // ═══════════════════════════════════
-function openPatchModal() {
-  document.getElementById('patch-textarea').value = '';
-  document.getElementById('patch-preview').textContent = '';
-  document.getElementById('patch-error').textContent = '';
-  document.getElementById('patch-modal').classList.add('visible');
-  setTimeout(() => document.getElementById('patch-textarea').focus(), 50);
-}
-
-function updatePatchPreview() {
-  const raw = document.getElementById('patch-textarea').value.trim();
-  const previewEl = document.getElementById('patch-preview');
-  const errorEl = document.getElementById('patch-error');
-  if (!raw) { previewEl.textContent = ''; errorEl.textContent = ''; return; }
-  try {
-    const p = JSON.parse(raw);
-    errorEl.textContent = '';
-    if (p.spec !== 'trip-planner-patch') { previewEl.textContent = '⚠ Invalid spec — expected "trip-planner-patch"'; return; }
-    const ops = Array.isArray(p.ops) ? p.ops : [];
-    if (!ops.length) { previewEl.textContent = 'No operations found.'; return; }
-    const counts = {};
-    ops.forEach(o => { counts[o.op] = (counts[o.op]||0)+1; });
-    const summary = Object.entries(counts).map(([op,n]) => n>1?`${op}×${n}`:op).join(', ');
-    previewEl.textContent = `${ops.length} operation${ops.length!==1?'s':''} found: ${summary}`;
-  } catch(e) {
-    previewEl.textContent = '';
-    errorEl.textContent = 'Invalid JSON — ' + e.message;
-  }
-}
-
-function confirmApplyPatch() {
-  const raw = document.getElementById('patch-textarea').value.trim();
-  const errorEl = document.getElementById('patch-error');
-  let p;
-  try { p = JSON.parse(raw); } catch(e) { errorEl.textContent = 'Invalid JSON: ' + e.message; return; }
-  const result = applyPatch(p);
-  if (result.error) { errorEl.textContent = result.error; return; }
-  closeAllModals();
-  const msg = document.createElement('div');
-  msg.style.cssText = 'position:fixed;bottom:4rem;left:1.2rem;background:var(--green);color:#fff;font-size:0.8rem;padding:0.4rem 0.9rem;border-radius:4px;z-index:9999;box-shadow:0 2px 8px rgba(0,0,0,0.15);';
-  msg.textContent = `✓ ${result.applied} op${result.applied!==1?'s':''} applied`;
-  document.body.appendChild(msg);
-  setTimeout(() => msg.remove(), 2500);
-}
-
 function applyPatch(patch) {
   if (patch.spec !== 'trip-planner-patch') return { error: 'Invalid spec — expected "trip-planner-patch"' };
   const ops = Array.isArray(patch.ops) ? patch.ops : [];

@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS public.master_items (
   default_pending_task TEXT,
   container_id TEXT,
   order_index  BIGINT,
+  pending_color TEXT,
   PRIMARY KEY (user_id, id)
 );
 

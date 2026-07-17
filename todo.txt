@@ -37,3 +37,13 @@ CREATE INDEX IF NOT EXISTS master_containers_user_idx ON public.master_container
 (schema.sql has already been updated to match — this is just the live-DB migration.
 Until this runs, pack-tab container data won't sync to/from Supabase — the app
 still works fully in local-only/localStorage terms.)
+
+SUPABASE MIGRATION NEEDED (run in the Supabase SQL editor)
+===========================================================
+Added 2026-07-16 (overnight batch): per-task pending highlight color. Run on the live DB:
+
+ALTER TABLE public.master_items ADD COLUMN IF NOT EXISTS pending_color TEXT;
+
+(schema.sql has already been updated to match — this is just the live-DB migration.
+Until this runs, a custom highlight color picked in the edit-task modal won't sync to/
+from Supabase — it still applies fine on this device via localStorage.)
