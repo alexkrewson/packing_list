@@ -602,6 +602,9 @@ const MASTER_LIBRARY_VERSION = 2;
 // ignored. This forces it to win once, the same way MASTER_LIBRARY_VERSION does.
 const SALEM_PACK_RESET_VERSION = 1;
 
+// Bump to re-run the phantom active/checked id cleanup in init() (see there).
+const PHANTOM_CLEANUP_VERSION = 1;
+
 // Pack-tab containers — a tree via parentId (null = top level). `order` is a single
 // counter shared with MASTER_ITEMS' `order` field, so a sub-container can be
 // interleaved with items as an ordinary sibling within its parent, not just grouped
@@ -1703,8 +1706,9 @@ function permanentlyDeleteItem() {
 function updateProgress(tab) {
   const activeIds = new Set(getActiveIds(currentTrip, tab));
   const checked = gs(currentTrip, tab+'Checked', {});
-  const total = [...activeIds].filter(id=>itemsForTab(tab).some(i=>i.id===id)).length;
-  const done = [...activeIds].filter(id=>checked[id]).length;
+  const validActiveIds = [...activeIds].filter(id=>itemsForTab(tab).some(i=>i.id===id));
+  const total = validActiveIds.length;
+  const done = validActiveIds.filter(id=>checked[id]).length;
 
   document.getElementById(`${tab}-done`).textContent = done;
   document.getElementById(`${tab}-total`).textContent = total;
@@ -2575,6 +2579,26 @@ function init() {
   const trips = getTripList();
   if (!trips.includes('salem')) { trips.unshift('salem'); saveTripList(trips); }
   if (!trips.includes('birthday')) { trips.splice(1,0,'birthday'); saveTripList(trips); }
+
+  // One-time cleanup: prune any "phantom" active/checked ids left pointing at items
+  // that no longer exist (e.g. from an old sync or a stale patch) — these were
+  // invisible in the list but could inflate the checked count past the total.
+  const storedPhantomVersion = parseInt(localStorage.getItem('phantomCleanupVersion') || '0', 10);
+  if (storedPhantomVersion !== PHANTOM_CLEANUP_VERSION) {
+    trips.forEach(tripId => {
+      ['pack','todo'].forEach(tab => {
+        const validIds = getActiveIds(tripId, tab).filter(id => itemsForTab(tab).some(i=>i.id===id));
+        setActiveIds(tripId, tab, validIds);
+        const validSet = new Set(validIds);
+        const checked = gs(tripId, tab+'Checked', {});
+        let changed = false;
+        Object.keys(checked).forEach(id => { if (!validSet.has(id)) { delete checked[id]; changed = true; } });
+        if (changed) ss(tripId, tab+'Checked', checked);
+      });
+    });
+    localStorage.setItem('phantomCleanupVersion', String(PHANTOM_CLEANUP_VERSION));
+  }
+
   currentTrip = gs('__meta__','lastTrip','salem');
   if (!trips.includes(currentTrip)) currentTrip = trips[0];
   buildTripSelect();
