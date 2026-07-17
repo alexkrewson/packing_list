@@ -67,6 +67,11 @@ body{background:var(--paper);color:var(--ink);font-family:'DM Sans',sans-serif;m
    so their checkbox sat ~3px left of sibling items' checkboxes. Match it. */
 .container-li .container-header{padding:0 0.2rem;}
 
+/* Long-press drag reorder */
+.dragging{opacity:0.85;background:var(--paper);box-shadow:0 4px 14px rgba(0,0,0,0.18);position:relative;z-index:50;touch-action:none;}
+.drop-above{box-shadow:inset 0 2px 0 0 var(--accent);}
+.drop-below{box-shadow:inset 0 -2px 0 0 var(--accent);}
+
 /* List items */
 ul{list-style:none;border-left:1.5px solid var(--line);padding-left:1rem;}
 li{font-size:0.88rem;font-weight:300;color:var(--ink);padding:0.3rem 0.2rem;border-bottom:1px dotted var(--line);display:flex;align-items:center;gap:0.6rem;line-height:1.4;cursor:pointer;border-radius:3px;transition:background 0.15s;user-select:none;}
@@ -336,7 +341,10 @@ li.pending.checked .item-text{color:var(--muted);}
     </div>
     <div class="panel-footer">
       <span class="count" id="pack-footer"></span>
-      <button class="reset-btn" onclick="resetTab('pack')">Reset</button>
+      <div style="display:flex;gap:0.5rem">
+        <button class="top-btn" onclick="openAddContainerModal(null)">+ Container</button>
+        <button class="reset-btn" onclick="resetTab('pack')">Reset</button>
+      </div>
     </div>
   </div>
 
@@ -419,6 +427,41 @@ li.pending.checked .item-text{color:var(--muted);}
     <div class="modal-btns"><div class="right">
       <button class="btn" onclick="closeAllModals();openEditModal(editState.item,editState.tab,editState.groupId)">Cancel</button>
       <button class="btn danger" onclick="permanentlyDeleteItem()">Delete from all trips</button>
+    </div></div>
+  </div>
+</div>
+
+<!-- Add/rename container modal -->
+<div class="overlay" id="container-edit-modal">
+  <div class="modal-box">
+    <h2 id="container-edit-title">Add Container</h2>
+    <div class="modal-field">
+      <label>Name</label>
+      <input id="container-edit-name" type="text" placeholder="e.g. Cooler">
+    </div>
+    <div class="modal-field">
+      <label>Icon</label>
+      <input id="container-edit-icon" type="text" placeholder="📁" maxlength="4" style="width:4rem">
+    </div>
+    <div class="modal-field" id="container-edit-parent-row">
+      <label>Parent</label>
+      <select id="container-edit-parent"></select>
+    </div>
+    <div class="modal-btns"><div class="right">
+      <button class="btn" onclick="closeAllModals()">Cancel</button>
+      <button class="btn primary" onclick="saveContainerModal()">Save</button>
+    </div></div>
+  </div>
+</div>
+
+<!-- Confirm delete container modal -->
+<div class="overlay" id="confirm-delete-container-modal">
+  <div class="modal-box">
+    <h2>Delete Container?</h2>
+    <p class="confirm-msg" id="confirm-delete-container-msg"></p>
+    <div class="modal-btns"><div class="right">
+      <button class="btn" onclick="closeAllModals()">Cancel</button>
+      <button class="btn danger" onclick="confirmDeleteContainer()">Delete</button>
     </div></div>
   </div>
 </div>
@@ -884,8 +927,18 @@ function ensureLooseContainer() {
 }
 function getContainer(id) { return MASTER_CONTAINERS.find(c=>c.id===id); }
 function getItemContainerId(item) { return item.containerId || 'c_loose'; }
+// Sorts a mixed list of {type, node} item/container entries: alphabetical by name is
+// the default, but if ANY sibling in this list has a manualOrder (set by dragging —
+// see attachLongPressDrag), the whole list sorts by that instead. This is what makes
+// a container's ordering "stick" once you've manually rearranged it even once.
+function sortChildren(nodes) {
+  const anyManual = nodes.some(n => n.node.manualOrder != null);
+  if (anyManual) return [...nodes].sort((a,b) => (a.node.manualOrder ?? Infinity) - (b.node.manualOrder ?? Infinity));
+  return [...nodes].sort((a,b) => a.node.name.localeCompare(b.node.name));
+}
 function containerChildren(parentId) {
-  return MASTER_CONTAINERS.filter(c=>c.parentId===parentId).sort((a,b)=>a.order-b.order);
+  const kids = MASTER_CONTAINERS.filter(c=>c.parentId===parentId);
+  return sortChildren(kids.map(c=>({type:'container',node:c}))).map(c=>c.node);
 }
 function itemsInContainer(containerId, tab='pack') {
   return itemsForTab(tab).filter(i=>getItemContainerId(i)===containerId);
@@ -1064,7 +1117,10 @@ function toggleContainer(containerId, activeLeafIds) {
 function buildContainerNode(container, depth, activeIds, checked, pending) {
   const leafIds = collectLeafIds(container.id);
   const activeLeafIds = leafIds.filter(id => activeIds.has(id));
-  if (!activeLeafIds.length) return null;
+  // Hide containers whose contents are all sitting in the pool (nothing active), but
+  // always show a genuinely empty container (no items at all yet) so it's usable —
+  // otherwise a freshly-created or freshly-converted container would be invisible.
+  if (leafIds.length > 0 && !activeLeafIds.length) return null;
 
   const wrap = document.createElement('div');
   wrap.className = `category container-node depth-${depth}`;
@@ -1075,6 +1131,7 @@ function buildContainerNode(container, depth, activeIds, checked, pending) {
   header.className = 'category-header container-header';
   header.innerHTML = `<span class="cb container-cb${state==='checked'?' checked':''}${state==='indeterminate'?' indeterminate':''}"></span><span class="cat-icon">${container.icon||'📁'}</span><span class="cat-title">${container.name}</span><span class="cat-count" id="cnt-pack-${container.id}"></span>`;
   header.querySelector('.container-cb').onclick = e => { e.stopPropagation(); toggleContainer(container.id, activeLeafIds); };
+  attachContainerCtx(header, container);
   const addBtn = document.createElement('button');
   addBtn.className = 'add-btn'; addBtn.textContent = '+';
   addBtn.onclick = () => showAddRow('pack', container.id);
@@ -1084,9 +1141,9 @@ function buildContainerNode(container, depth, activeIds, checked, pending) {
   const ul = document.createElement('ul');
   ul.id = `ul-pack-${container.id}`;
 
-  const childItems = itemsInContainer(container.id).map(i => ({ type:'item', node:i, order:i.order||0 }));
-  const childContainers = containerChildren(container.id).map(c => ({ type:'container', node:c, order:c.order }));
-  [...childItems, ...childContainers].sort((a,b)=>a.order-b.order).forEach(child => {
+  const childItems = itemsInContainer(container.id).map(i => ({ type:'item', node:i }));
+  const childContainers = MASTER_CONTAINERS.filter(c=>c.parentId===container.id).map(c => ({ type:'container', node:c }));
+  sortChildren([...childItems, ...childContainers]).forEach(child => {
     if (child.type === 'item') {
       if (activeIds.has(child.node.id)) ul.appendChild(buildActiveLi(child.node, 'pack', checked, pending));
     } else {
@@ -1094,6 +1151,7 @@ function buildContainerNode(container, depth, activeIds, checked, pending) {
       if (subNode) {
         const li = document.createElement('li');
         li.className = 'container-li';
+        li.dataset.containerId = child.node.id;
         li.appendChild(subNode);
         ul.appendChild(li);
       }
@@ -1324,6 +1382,7 @@ function attachItemCtx(li, item, tab) {
       <div class="ctx-item" id="cm-toggle">${isChecked?'☐ Un<u>c</u>heck':'☑ <u>C</u>heck'}</div>
       <div class="ctx-divider"></div>
       ${tab==='pack'?'<div class="ctx-item" id="cm-todo">📋 Add <u>t</u>o-do task</div><div class="ctx-divider"></div>':''}
+      ${tab==='pack'?'<div class="ctx-item" id="cm-containerize">📦 T<u>u</u>rn into container</div><div class="ctx-divider"></div>':''}
       <div class="ctx-item" id="cm-edit">✏️ <u>E</u>dit item info</div>
       <div class="ctx-divider"></div>
       <div class="ctx-item danger" id="cm-remove">✕ <u>R</u>emove from list</div>
@@ -1332,6 +1391,7 @@ function attachItemCtx(li, item, tab) {
     const editFn    = () => { closeCtxMenu(); openEditModal(item, tab, getItemContainerId(item)); };
     const removeFn  = () => { removeItemFromTrip(item.id, tab); closeCtxMenu(); };
     const todoFn    = () => { closeCtxMenu(); openSuggestModal(item); };
+    const containerizeFn = () => { closeCtxMenu(); convertItemToContainer(item); };
     const pendingFn = isPending
       ? () => { clearPendingForItem(item.id); }
       : () => { closeCtxMenu(); openPendingModal(item); };
@@ -1339,15 +1399,16 @@ function attachItemCtx(li, item, tab) {
     menu.querySelector('#cm-toggle').onclick  = toggleFn;
     menu.querySelector('#cm-edit').onclick    = editFn;
     menu.querySelector('#cm-remove').onclick  = removeFn;
-    if (tab === 'pack') menu.querySelector('#cm-todo').onclick = todoFn;
+    if (tab === 'pack') {
+      menu.querySelector('#cm-todo').onclick = todoFn;
+      menu.querySelector('#cm-containerize').onclick = containerizeFn;
+    }
     positionMenu(menu, e);
     document.body.appendChild(menu); ctxMenu = menu;
-    _setCtxKeys({ p: pendingFn, c: toggleFn, e: editFn, r: removeFn, ...(tab==='pack'?{t:todoFn}:{}) });
+    _setCtxKeys({ p: pendingFn, c: toggleFn, e: editFn, r: removeFn, ...(tab==='pack'?{t:todoFn, u:containerizeFn}:{}) });
   };
   li.addEventListener('contextmenu', handler);
-  li.addEventListener('touchstart', e=>{ pressTimer=setTimeout(()=>handler(e),500); },{passive:true});
-  li.addEventListener('touchend', ()=>clearTimeout(pressTimer));
-  li.addEventListener('touchmove', ()=>clearTimeout(pressTimer));
+  attachLongPressDrag(li, li, handler);
 }
 
 // ═══════════════════════════════════
@@ -1676,6 +1737,255 @@ function openConfirmDelete() {
   const item = editState.item;
   document.getElementById('confirm-msg').innerHTML = `<strong>"${item.name}"</strong> will be permanently removed from the item library and from all trips. This cannot be undone.`;
   document.getElementById('confirm-delete-modal').classList.add('visible');
+}
+
+// ═══════════════════════════════════
+// CONTAINER ADD / RENAME / DELETE
+// ═══════════════════════════════════
+let containerModalState = { mode: 'add', container: null };
+
+function _populateContainerParentSelect(selectId, selectedParentId, excludeId) {
+  const sel = document.getElementById(selectId);
+  const flat = flattenContainerTree().filter(({container}) => container.id !== excludeId);
+  sel.innerHTML = `<option value="">— (top level) —</option>` + flat.map(({container,depth}) =>
+    `<option value="${container.id}"${container.id===selectedParentId?' selected':''}>${'— '.repeat(depth)}${container.icon||'📁'} ${container.name}</option>`
+  ).join('');
+}
+
+function openAddContainerModal(parentId) {
+  containerModalState = { mode: 'add', container: null };
+  document.getElementById('container-edit-title').textContent = 'Add Container';
+  document.getElementById('container-edit-name').value = '';
+  document.getElementById('container-edit-icon').value = '📁';
+  document.getElementById('container-edit-parent-row').style.display = 'block';
+  _populateContainerParentSelect('container-edit-parent', parentId || '', null);
+  document.getElementById('container-edit-modal').classList.add('visible');
+  setTimeout(() => document.getElementById('container-edit-name').focus(), 50);
+}
+
+function openRenameContainerModal(container) {
+  containerModalState = { mode: 'rename', container };
+  document.getElementById('container-edit-title').textContent = 'Rename Container';
+  document.getElementById('container-edit-name').value = container.name;
+  document.getElementById('container-edit-icon').value = container.icon || '📁';
+  document.getElementById('container-edit-parent-row').style.display = 'none';
+  document.getElementById('container-edit-modal').classList.add('visible');
+  setTimeout(() => document.getElementById('container-edit-name').focus(), 50);
+}
+
+function saveContainerModal() {
+  const name = document.getElementById('container-edit-name').value.trim();
+  if (!name) return;
+  const icon = document.getElementById('container-edit-icon').value.trim() || '📁';
+
+  if (containerModalState.mode === 'add') {
+    const parentId = document.getElementById('container-edit-parent').value || null;
+    _patchAddContainer({ id: 'c_'+Date.now(), name, icon, parentId });
+  } else {
+    _patchRenameContainer({ id: containerModalState.container.id, newName: name, newIcon: icon });
+  }
+  saveMasterContainers();
+  closeAllModals();
+  renderTab('pack');
+}
+
+// ═══════════════════════════════════
+// LONG-PRESS DRAG REORDER (pack tab, touch only)
+// ═══════════════════════════════════
+// Coordinates with the existing long-press-to-open-context-menu gesture on the same
+// element: held still past the threshold and released -> menu opens (unchanged).
+// Held past the threshold and then moved -> drag starts instead, menu never opens.
+// Moved before the threshold fires -> treated as an ordinary scroll, both cancelled.
+let _dragState = null;
+
+function attachLongPressDrag(triggerEl, draggedEl, onLongPressRelease) {
+  let holdTimer = null, armed = false, dragging = false, startY = 0, startX = 0;
+  const cancel = () => { clearTimeout(holdTimer); holdTimer = null; armed = false; };
+
+  triggerEl.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1) return;
+    startY = e.touches[0].clientY;
+    startX = e.touches[0].clientX;
+    dragging = false;
+    holdTimer = setTimeout(() => { armed = true; }, 500);
+  }, {passive:true});
+
+  triggerEl.addEventListener('touchmove', e => {
+    if (!holdTimer && !armed) return;
+    const dx = Math.abs(e.touches[0].clientX - startX);
+    const dy = e.touches[0].clientY - startY;
+    if (!armed) {
+      if (Math.abs(dy) > 10 || dx > 10) cancel();
+      return;
+    }
+    if (!dragging && (Math.abs(dy) > 10 || dx > 10)) {
+      dragging = true;
+      _dragStart(draggedEl, e.touches[0].clientY);
+    }
+    if (dragging) {
+      e.preventDefault();
+      _dragMove(draggedEl, e.touches[0].clientY);
+    }
+  }, {passive:false});
+
+  triggerEl.addEventListener('touchend', e => {
+    if (dragging) { _dragEnd(draggedEl); dragging = false; }
+    else if (armed) { onLongPressRelease(e); }
+    cancel();
+  });
+  triggerEl.addEventListener('touchcancel', () => {
+    if (dragging) { _dragCancel(); dragging = false; }
+    cancel();
+  });
+}
+
+function _dragStart(el, startTouchY) {
+  const parent = el.parentElement;
+  const siblings = [...parent.children].filter(c => c !== el);
+  _dragState = {
+    el, parent, startTouchY,
+    siblingRects: siblings.map(s => ({ el: s, rect: s.getBoundingClientRect() })),
+    targetIndex: siblings.length
+  };
+  el.classList.add('dragging');
+}
+
+function _dragMove(el, clientY) {
+  if (!_dragState || _dragState.el !== el) return;
+  el.style.transform = `translateY(${clientY - _dragState.startTouchY}px)`;
+
+  let targetIndex = _dragState.siblingRects.length;
+  for (let i = 0; i < _dragState.siblingRects.length; i++) {
+    const mid = _dragState.siblingRects[i].rect.top + _dragState.siblingRects[i].rect.height/2;
+    if (clientY < mid) { targetIndex = i; break; }
+  }
+  _dragState.targetIndex = targetIndex;
+
+  _dragState.siblingRects.forEach(s => s.el.classList.remove('drop-above','drop-below'));
+  if (targetIndex < _dragState.siblingRects.length) {
+    _dragState.siblingRects[targetIndex].el.classList.add('drop-above');
+  } else if (_dragState.siblingRects.length) {
+    _dragState.siblingRects[_dragState.siblingRects.length-1].el.classList.add('drop-below');
+  }
+}
+
+function _dragCleanupVisuals() {
+  if (!_dragState) return;
+  _dragState.el.classList.remove('dragging');
+  _dragState.el.style.transform = '';
+  _dragState.siblingRects.forEach(s => s.el.classList.remove('drop-above','drop-below'));
+}
+
+function _dragCancel() {
+  _dragCleanupVisuals();
+  _dragState = null;
+}
+
+function _dragEnd(el) {
+  if (!_dragState || _dragState.el !== el) return;
+  const { parent, siblingRects, targetIndex } = _dragState;
+  const orderedEls = siblingRects.map(s => s.el);
+  orderedEls.splice(targetIndex, 0, el);
+  _dragCleanupVisuals();
+  _dragState = null;
+  _persistManualOrder(orderedEls);
+}
+
+// Assigns fresh spaced manualOrder values to every element in the new sequence —
+// "materializing" manual order for this whole sibling scope, per item id (li) or
+// container id (li.container-li wrapper, or a top-level .container-node div).
+function _persistManualOrder(orderedEls) {
+  orderedEls.forEach((el, idx) => {
+    const order = (idx + 1) * 10;
+    if (el.dataset.itemId) {
+      const item = getItem(el.dataset.itemId);
+      if (item) item.manualOrder = order;
+    } else if (el.dataset.containerId) {
+      const container = getContainer(el.dataset.containerId);
+      if (container) container.manualOrder = order;
+    }
+  });
+  saveMasterItems();
+  saveMasterContainers();
+  renderTab('pack');
+}
+
+function attachContainerCtx(header, container) {
+  const handler = e => {
+    e.preventDefault(); closeCtxMenu();
+    const menu = document.createElement('div');
+    menu.className = 'ctx-menu';
+    menu.innerHTML = `
+      <div class="ctx-item" id="ccm-rename">✏️ <u>R</u>ename container</div>
+      <div class="ctx-item" id="ccm-addsub">📦 Add sub-container</div>
+      <div class="ctx-divider"></div>
+      <div class="ctx-item danger" id="ccm-delete">🗑 <u>D</u>elete container</div>
+    `;
+    const renameFn = () => { closeCtxMenu(); openRenameContainerModal(container); };
+    const addSubFn = () => { closeCtxMenu(); openAddContainerModal(container.id); };
+    const deleteFn = () => { closeCtxMenu(); openDeleteContainerConfirm(container); };
+    menu.querySelector('#ccm-rename').onclick = renameFn;
+    menu.querySelector('#ccm-addsub').onclick = addSubFn;
+    menu.querySelector('#ccm-delete').onclick = deleteFn;
+    positionMenu(menu, e);
+    document.body.appendChild(menu); ctxMenu = menu;
+    _setCtxKeys({ r: renameFn, d: deleteFn });
+  };
+  header.addEventListener('contextmenu', handler);
+  const draggedEl = header.closest('li.container-li') || header.closest('.container-node');
+  attachLongPressDrag(header, draggedEl, handler);
+}
+
+let deleteContainerState = null;
+
+function openDeleteContainerConfirm(container) {
+  if (container.id === 'c_loose') {
+    showTooltip(document.body, `"Loose" can't be deleted — it's the default spot for uncontained items`, true);
+    return;
+  }
+  deleteContainerState = container;
+  const itemCount = collectLeafIds(container.id).length;
+  const subCount = containerChildren(container.id).length;
+  const parent = container.parentId ? getContainer(container.parentId) : null;
+  const destination = parent ? `"${parent.name}"` : 'the top level';
+  const parts = [];
+  if (itemCount) parts.push(`${itemCount} item${itemCount!==1?'s':''}`);
+  if (subCount) parts.push(`${subCount} sub-container${subCount!==1?'s':''}`);
+  const contents = parts.length ? parts.join(' and ') : 'nothing';
+  document.getElementById('confirm-delete-container-msg').innerHTML =
+    `<strong>"${container.name}"</strong> contains ${contents}. Deleting it will move its contents up to ${destination}.`;
+  document.getElementById('confirm-delete-container-modal').classList.add('visible');
+}
+
+function confirmDeleteContainer() {
+  if (!deleteContainerState) return;
+  _patchDeleteContainer({ id: deleteContainerState.id });
+  saveMasterContainers();
+  saveMasterItems();
+  deleteContainerState = null;
+  closeAllModals();
+  renderTab('pack');
+}
+
+// Replaces a pack item with a new (empty) container at the same spot — same parent
+// container and order, so it visually takes over the item's row. The item is removed
+// from the library and from every trip's active/checked/pending state, mirroring the
+// cleanup permanentlyDeleteItem does below.
+function convertItemToContainer(item) {
+  const newContainerId = 'c_' + Date.now();
+  MASTER_CONTAINERS.push({ id:newContainerId, name:item.name, icon:'📁', parentId:getItemContainerId(item), order:item.order||Date.now() });
+  MASTER_ITEMS = MASTER_ITEMS.filter(i=>i.id!==item.id);
+  saveMasterItems();
+  saveMasterContainers();
+  getTripList().forEach(tripId => {
+    const ids = getActiveIds(tripId, 'pack').filter(id=>id!==item.id);
+    setActiveIds(tripId, 'pack', ids);
+    const checked = gs(tripId, 'packChecked', {});
+    if (item.id in checked) { delete checked[item.id]; ss(tripId, 'packChecked', checked); }
+    const pending = getPending(tripId);
+    if (item.id in pending) { delete pending[item.id]; savePending(tripId, pending); }
+  });
+  renderTab('pack');
 }
 
 function permanentlyDeleteItem() {
