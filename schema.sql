@@ -6,24 +6,38 @@
 -- ─────────────────────────────────────────────
 
 -- Master item library (one row per item per user)
+-- Pack-tab items use container_id (+ order_index); todo-tab items use cat_id.
 CREATE TABLE IF NOT EXISTS public.master_items (
   user_id      UUID    NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   id           TEXT    NOT NULL,
   name         TEXT    NOT NULL,
-  cat_id       TEXT    NOT NULL,
+  cat_id       TEXT,
   tab          TEXT    NOT NULL CHECK (tab IN ('pack','todo')),
   subcat_label TEXT,
   default_pending_task TEXT,
+  container_id TEXT,
+  order_index  BIGINT,
   PRIMARY KEY (user_id, id)
 );
 
--- Master category library (one row per category per user)
+-- Master category library (todo tab, flat — one row per category per user)
 CREATE TABLE IF NOT EXISTS public.master_cats (
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   id      TEXT NOT NULL,
   icon    TEXT NOT NULL,
   title   TEXT NOT NULL,
   tab     TEXT NOT NULL CHECK (tab IN ('pack','todo')),
+  PRIMARY KEY (user_id, id)
+);
+
+-- Master container library (pack tab, tree via parent_id — one row per container per user)
+CREATE TABLE IF NOT EXISTS public.master_containers (
+  user_id     UUID   NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  id          TEXT   NOT NULL,
+  name        TEXT   NOT NULL,
+  icon        TEXT,
+  parent_id   TEXT,
+  order_index BIGINT NOT NULL DEFAULT 0,
   PRIMARY KEY (user_id, id)
 );
 
@@ -67,11 +81,12 @@ CREATE TABLE IF NOT EXISTS public.user_meta (
 -- Users can only read/write their own data.
 -- ─────────────────────────────────────────────
 
-ALTER TABLE public.master_items    ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.master_cats     ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.trips           ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.trip_state      ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.user_meta       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.master_items      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.master_cats       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.master_containers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.trips             ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.trip_state        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_meta         ENABLE ROW LEVEL SECURITY;
 
 -- master_items
 CREATE POLICY "Users manage own master_items"
@@ -82,6 +97,12 @@ CREATE POLICY "Users manage own master_items"
 -- master_cats
 CREATE POLICY "Users manage own master_cats"
   ON public.master_cats FOR ALL
+  USING  (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+-- master_containers
+CREATE POLICY "Users manage own master_containers"
+  ON public.master_containers FOR ALL
   USING  (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
 
@@ -107,7 +128,8 @@ CREATE POLICY "Users manage own user_meta"
 -- INDEXES (optional, for performance)
 -- ─────────────────────────────────────────────
 
-CREATE INDEX IF NOT EXISTS master_items_user_idx ON public.master_items (user_id);
-CREATE INDEX IF NOT EXISTS master_cats_user_idx  ON public.master_cats  (user_id);
-CREATE INDEX IF NOT EXISTS trips_user_idx        ON public.trips        (user_id);
-CREATE INDEX IF NOT EXISTS trip_state_user_idx   ON public.trip_state   (user_id);
+CREATE INDEX IF NOT EXISTS master_items_user_idx      ON public.master_items      (user_id);
+CREATE INDEX IF NOT EXISTS master_cats_user_idx       ON public.master_cats       (user_id);
+CREATE INDEX IF NOT EXISTS master_containers_user_idx ON public.master_containers (user_id);
+CREATE INDEX IF NOT EXISTS trips_user_idx             ON public.trips             (user_id);
+CREATE INDEX IF NOT EXISTS trip_state_user_idx        ON public.trip_state        (user_id);
