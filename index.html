@@ -279,16 +279,20 @@ li.pending.checked .item-text{color:var(--text-secondary);}
 /* Profile menu */
 .profile-wrap{position:relative;display:none;flex-shrink:0;}
 .profile-wrap.visible{display:block;}
-.profile-btn{background:none;border:1.5px solid var(--border);border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;transition:border-color 0.15s;}
+.profile-btn{background:none;border:1.5px solid var(--border);border-radius:6px;min-width:44px;min-height:44px;flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;transition:border-color 0.15s;}
 .profile-btn:hover{border-color:var(--accent);}
-.profile-btn svg{width:15px;height:15px;fill:var(--text-secondary);transition:fill 0.15s;}
+.profile-btn svg{width:18px;height:18px;fill:var(--text-secondary);transition:fill 0.15s;}
 .profile-btn:hover svg{fill:var(--accent);}
-.profile-dropdown{position:absolute;right:0;top:calc(100% + 6px);background:var(--bg-raised);border:1px solid var(--border);border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,0.35);z-index:1000;overflow:hidden;min-width:170px;animation:ctxFade 0.1s ease;display:none;}
+.profile-dropdown{position:absolute;right:0;top:calc(100% + 8px);width:220px;background:var(--bg-raised);border:1px solid var(--border);border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,0.35);padding:0.5rem;z-index:1000;overflow:hidden;animation:ctxFade 0.1s ease;display:none;}
 .profile-dropdown.open{display:block;}
-.profile-dd-item{padding:0.55rem 1rem;font-size:0.82rem;cursor:pointer;color:var(--text-primary);display:flex;align-items:center;gap:0.5rem;transition:background 0.1s;}
+.settings-section-toggle{display:flex;align-items:center;justify-content:space-between;width:100%;padding:0.35rem 0.5rem;background:none;border:none;cursor:pointer;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-tertiary);}
+.settings-section-chevron{font-size:0.6rem;transition:transform 0.15s;}
+.settings-section-body{display:none;}
+.settings-section.open .settings-section-body{display:block;}
+.settings-section.open .settings-section-chevron{transform:rotate(180deg);}
+.profile-dd-item{padding:0.55rem 1rem;min-height:44px;font-size:0.82rem;cursor:pointer;color:var(--text-primary);display:flex;align-items:center;gap:0.5rem;transition:background 0.1s;border-radius:6px;}
 .profile-dd-item:hover{background:rgba(255,255,255,0.06);}
 .profile-dd-item.danger{color:var(--danger-text);}
-.profile-dd-divider{height:1px;background:var(--border);}
 
 /* Password reset overlay */
 .pwreset-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9500;display:none;align-items:center;justify-content:center;padding:1.5rem;}
@@ -335,19 +339,28 @@ li.pending.checked .item-text{color:var(--text-secondary);}
   <div class="trip-bar">
     <h1>✈️</h1>
     <select class="trip-select" id="trip-select" onchange="switchTrip(this.value)"></select>
-    <button class="top-btn green" onclick="openEditsModal()">Edits</button>
-    <button class="top-btn" id="copy-json-btn" onclick="copyJsonContext()">Copy JSON</button>
-    <button class="top-btn" id="paste-json-btn" onclick="pasteJsonPatch()">Paste JSON</button>
     <button class="top-btn ml-auto" onclick="openNewTripModal()">+ New Trip</button>
     <div class="profile-wrap" id="profile-wrap">
-      <button class="profile-btn" id="profile-btn" onclick="toggleProfileMenu(event)" title="Account">
-        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg>
+      <button class="profile-btn" id="profile-btn" onclick="toggleProfileMenu(event)" title="Settings">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M19.4 13a7.5 7.5 0 000-2l2.1-1.6a.5.5 0 00.1-.6l-2-3.4a.5.5 0 00-.6-.2l-2.5 1a7.4 7.4 0 00-1.7-1l-.4-2.6a.5.5 0 00-.5-.4h-4a.5.5 0 00-.5.4l-.4 2.6a7.4 7.4 0 00-1.7 1l-2.5-1a.5.5 0 00-.6.2l-2 3.4a.5.5 0 00.1.6L4.6 11a7.5 7.5 0 000 2l-2.1 1.6a.5.5 0 00-.1.6l2 3.4a.5.5 0 00.6.2l2.5-1a7.4 7.4 0 001.7 1l.4 2.6a.5.5 0 00.5.4h4a.5.5 0 00.5-.4l.4-2.6a7.4 7.4 0 001.7-1l2.5 1a.5.5 0 00.6-.2l2-3.4a.5.5 0 00-.1-.6L19.4 13zM12 15.5a3.5 3.5 0 110-7 3.5 3.5 0 010 7z"/></svg>
       </button>
       <div class="profile-dropdown" id="profile-dropdown">
-        <div class="profile-dd-item" onclick="openChangePasswordModal()">🔑 Change password</div>
-        <div class="profile-dd-item" onclick="openDuplicatesModal()">🧹 Find duplicates</div>
-        <div class="profile-dd-divider"></div>
-        <div class="profile-dd-item danger" onclick="authSignOut()">Sign out</div>
+        <div class="settings-section">
+          <button type="button" class="settings-section-toggle" onclick="toggleSettingsSection(event,this)">Account<span class="settings-section-chevron">▾</span></button>
+          <div class="settings-section-body">
+            <div class="profile-dd-item" onclick="openChangePasswordModal()">🔑 Change password</div>
+            <div class="profile-dd-item danger" onclick="authSignOut()">Sign out</div>
+          </div>
+        </div>
+        <div class="settings-section">
+          <button type="button" class="settings-section-toggle" onclick="toggleSettingsSection(event,this)">Advanced<span class="settings-section-chevron">▾</span></button>
+          <div class="settings-section-body">
+            <div class="profile-dd-item" onclick="openEditsModal()">📝 View edits</div>
+            <div class="profile-dd-item" onclick="copyJsonContext()">📋 Copy JSON</div>
+            <div class="profile-dd-item" onclick="pasteJsonPatch()">📥 Paste JSON</div>
+            <div class="profile-dd-item" onclick="openDuplicatesModal()">🧹 Find duplicates</div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -2197,7 +2210,7 @@ function showTooltip(anchorEl, text, isError) {
 }
 
 function copyJsonContext() {
-  const btn = document.getElementById('copy-json-btn');
+  const btn = document.getElementById('profile-btn');
   const json = JSON.stringify(buildAIContext(), null, 2);
   if (navigator.clipboard && window.isSecureContext) {
     navigator.clipboard.writeText(json)
@@ -2262,7 +2275,7 @@ function pulseAffectedItems(ops) {
 }
 
 async function pasteJsonPatch() {
-  const btn = document.getElementById('paste-json-btn');
+  const btn = document.getElementById('profile-btn');
   let text;
   try {
     text = await navigator.clipboard.readText();
@@ -3204,6 +3217,10 @@ function toggleProfileMenu(e) {
 }
 function closeProfileMenu() {
   document.getElementById('profile-dropdown').classList.remove('open');
+}
+function toggleSettingsSection(e, btn) {
+  e.stopPropagation();
+  btn.parentElement.classList.toggle('open');
 }
 document.addEventListener('click', () => closeProfileMenu());
 
