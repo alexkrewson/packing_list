@@ -47,3 +47,18 @@ ALTER TABLE public.master_items ADD COLUMN IF NOT EXISTS pending_color TEXT;
 (schema.sql has already been updated to match — this is just the live-DB migration.
 Until this runs, a custom highlight color picked in the edit-task modal won't sync to/
 from Supabase — it still applies fine on this device via localStorage.)
+
+UI / SHARED-DESIGN-SYSTEM GAPS (no DB migration needed)
+===========================================================
+Added 2026-07-18: re-themed to the shared dark "Ember" design system
+(apps/shared/css-best-practices.md) and consolidated the header buttons into
+a settings menu. Left open from that pass:
+
+- No light/dark toggle. The shared doc treats an explicit, persistent
+  [data-theme="light"] toggle as baseline (not optional), but this app only
+  ships the dark Ember theme right now.
+- Escape key doesn't close the settings menu (top-right gear icon). It
+  already closes modals and the right-click context menu, just not this.
+- No "About" page/help content section — the shared doc has a recipe for one
+  (collapsible left-nav sidebar) but there's no help content to put in it yet,
+  so low priority until there's actual content to house.
