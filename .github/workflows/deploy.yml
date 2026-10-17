@@ -26,3 +26,5 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
           publish_branch: gh-pages
+          # Writes a CNAME file each deploy; without it every deploy drops the custom domain.
+          cname: trip.trolleysolution.com

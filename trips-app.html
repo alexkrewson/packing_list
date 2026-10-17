@@ -2544,7 +2544,12 @@ async function authSignUp() {
   const btn = document.getElementById('auth-signup-btn');
   btn.textContent = 'Creating…'; btn.disabled = true;
   _setAuthError('');
-  const { data, error } = await sb.auth.signUp({ email, password });
+  // The Supabase project's Site URL is shared with other apps, so say where the
+  // confirmation link should land. Must be in Auth → URL Configuration → Redirect
+  // URLs, or Supabase falls back to the Site URL.
+  const { data, error } = await sb.auth.signUp({
+    email, password, options: { emailRedirectTo: location.origin + location.pathname },
+  });
   btn.textContent = 'Create account'; btn.disabled = false;
   if (error) { _setAuthError(error.message); return; }
   if (data.user && !data.session) {
