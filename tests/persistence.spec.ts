@@ -44,6 +44,8 @@ test.describe('persistence across reload', () => {
     await localPage.locator('#edit-item-cat').selectOption('__new__');
     await localPage.locator('#edit-new-cat').fill('Entryway');
     await localPage.getByRole('button', { name: 'Save' }).click();
+    // Wait for the save to land before reloading, or the reload can race it.
+    await expect(section(localPage, 'Entryway')).toBeVisible();
 
     await localPage.reload();
 

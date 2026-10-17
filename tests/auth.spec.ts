@@ -113,27 +113,21 @@ test.describe('first-login cloud sync', () => {
     // master_items (localStorage's "masterItems" key doesn't exist yet at
     // that point — it only reads what's already local, it doesn't know
     // about the hardcoded defaults). They arrive moments later via a
-    // different path: init() runs right after with no local
-    // "masterLibraryVersion", so its isReset branch calls saveMasterItems(),
-    // which fire-and-forget syncs the hardcoded defaults up — hence the poll.
+    // different path: init() finds no library locally or in the cloud, so it
+    // calls saveMasterItems(), which fire-and-forget syncs the hardcoded
+    // defaults up — hence the poll.
     await expect.poll(() => fakeSupabase.tables.master_items.length).toBeGreaterThan(0);
   });
 
   /**
-   * KNOWN BUG (found while writing this test, not something this suite
-   * fixes): on a device that has never run the app before, `init()`'s
-   * `masterLibraryVersion` localStorage key is absent, so `isReset` is
-   * unconditionally true — even though this is an *existing* Supabase
-   * account with its own customized item library that loadUserData() just
-   * pulled down. Because `isReset` is true, init() skips loading the
-   * just-fetched master items/containers and instead re-persists the
-   * hardcoded default library over them via saveMasterItems() /
-   * saveMasterContainers() — which immediately re-syncs those hardcoded
-   * defaults back up to Supabase too (delete-then-reinsert), clobbering the
-   * account's real data. Reproduced below: a cloud-only "Custom Cloud Item"
-   * is lost after signing in on a "fresh device" (empty localStorage).
+   * Regression: on a device that had never run the app (no
+   * `masterLibraryVersion` key), init() used to treat the missing key as a
+   * stale library, overwrite the item library loadUserData() had just pulled
+   * down with the hardcoded defaults, and sync those back up over the
+   * account's real data. Moving the app to a new domain makes every browser
+   * a "fresh device", so this must hold.
    */
-  test('BUG: signing in on a fresh device clobbers an existing account\'s custom cloud item library', async ({ mockPage, fakeSupabase }) => {
+  test("signing in on a fresh device keeps an existing account's cloud library and trip lists", async ({ mockPage, fakeSupabase }) => {
     const user = fakeSupabase.seedUser('cloud@example.com', 'password123');
     fakeSupabase.tables.trips.push({ id: 'salem', user_id: user.id, name: 'Salem' });
     fakeSupabase.tables.master_containers.push({ id: 'c_loose', name: 'Loose', icon: '🧳', parent_id: null, order_index: 0, user_id: user.id });
@@ -149,9 +143,12 @@ test.describe('first-login cloud sync', () => {
     await mockPage.locator('#auth-signin-btn').click();
     await expect(mockPage.locator('#auth-overlay')).toBeHidden();
 
-    // If/when this is fixed, this item should be visible and the assertion
-    // below should flip to "toBeGreaterThan(0)" / include the item id.
-    await expect(mockPage.locator('.item-text', { hasText: 'Custom Cloud Item' })).toHaveCount(0);
-    expect(fakeSupabase.tables.master_items.some((i: any) => i.id === 'i_custom')).toBe(false);
+    await expect(mockPage.locator('.item-text', { hasText: 'Custom Cloud Item' })).toHaveCount(1);
+    // Salem's pack list is the account's, not TRIP_DEFAULTS.salem.pack.
+    await expect(mockPage.locator('#pack-total')).toHaveText('1');
+    // Give any (wrongly) fire-and-forget sync a moment to land before checking the backend.
+    await mockPage.waitForTimeout(500);
+    expect(fakeSupabase.tables.master_items.map((i: any) => i.id)).toEqual(['i_custom']);
+    expect(fakeSupabase.tables.trip_state.find((s: any) => s.trip_id === 'salem')?.pack_active).toEqual(['i_custom']);
   });
 });

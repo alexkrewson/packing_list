@@ -31,6 +31,12 @@ export function makeSession(user: FakeUser) {
   };
 }
 
+// Primary keys from schema.sql, so upserts match rows the way Postgres would.
+const PRIMARY_KEYS: Record<string, string[]> = {
+  trip_state: ['user_id', 'trip_id'],
+  user_meta: ['user_id'],
+};
+
 /**
  * Minimal in-memory stand-in for a Supabase project: just enough of GoTrue
  * (auth/v1) and PostgREST (rest/v1) to exercise trips-app.html's auth + sync
@@ -153,8 +159,12 @@ export class FakeSupabase {
     if (method === 'POST') {
       const body = this.postBody(route);
       const incoming = Array.isArray(body) ? body : [body];
+      // Upsert on each table's real primary key (schema.sql), not just `id`:
+      // trip_state rows have no `id`, so matching on it made every trip's sync
+      // overwrite whichever trip_state row happened to come first.
+      const pk = PRIMARY_KEYS[table] ?? ['user_id', 'id'];
       incoming.forEach((row) => {
-        const idx = rows.findIndex((r) => r.id === row.id && (row.user_id == null || r.user_id === row.user_id));
+        const idx = rows.findIndex((r) => pk.every((k) => row[k] == null || r[k] === row[k]));
         if (idx >= 0) rows[idx] = { ...rows[idx], ...row };
         else rows.push(row);
       });

@@ -2907,13 +2907,18 @@ function init() {
   // copy, a deliberate reset happened in code — let the new hardcoded MASTER_ITEMS/
   // MASTER_CONTAINERS win instead of loading the stale persisted ones, then persist
   // that (which also overwrites any stale rows already synced to Supabase).
-  const storedVersion = parseInt(localStorage.getItem('masterLibraryVersion') || '0', 10);
-  const isReset = storedVersion !== MASTER_LIBRARY_VERSION;
+  // No stored version at all means this device has never saved a library, so there
+  // is nothing stale to reset: whatever loadUserData() just pulled down is the
+  // account's real library and must win (a fresh device or a new domain would
+  // otherwise overwrite it with the hardcoded defaults).
+  const storedVersion = localStorage.getItem('masterLibraryVersion');
+  const isReset = storedVersion !== null && parseInt(storedVersion, 10) !== MASTER_LIBRARY_VERSION;
 
+  let savedItems = null, savedContainers = null;
   if (!isReset) {
-    const savedItems = getMasterItems();
+    savedItems = getMasterItems();
     if (savedItems) MASTER_ITEMS = savedItems;
-    const savedContainers = getMasterContainers();
+    savedContainers = getMasterContainers();
     if (savedContainers) MASTER_CONTAINERS = savedContainers;
   }
   const savedCats = getMasterCats();
@@ -2921,17 +2926,19 @@ function init() {
   ensureLooseContainer();
   ensureTodoCats();
 
-  if (isReset) {
-    localStorage.setItem('masterLibraryVersion', String(MASTER_LIBRARY_VERSION));
-    saveMasterItems();
-    saveMasterContainers();
-  }
+  // Persist (and so sync up) the hardcoded defaults only for a deliberate reset, or
+  // when there's no library anywhere yet — i.e. a brand-new account or local-only use.
+  if (isReset || !savedItems) saveMasterItems();
+  if (isReset || !savedContainers) saveMasterContainers();
+  localStorage.setItem('masterLibraryVersion', String(MASTER_LIBRARY_VERSION));
 
-  const storedSalemPackVersion = parseInt(localStorage.getItem('salemPackResetVersion') || '0', 10);
-  if (storedSalemPackVersion !== SALEM_PACK_RESET_VERSION) {
+  // Same reasoning as above: only an older stored version means a stale Salem list.
+  // With no key, a never-touched Salem already falls back to TRIP_DEFAULTS.
+  const storedSalemPackVersion = localStorage.getItem('salemPackResetVersion');
+  if (storedSalemPackVersion !== null && parseInt(storedSalemPackVersion, 10) !== SALEM_PACK_RESET_VERSION) {
     setActiveIds('salem', 'pack', [...TRIP_DEFAULTS.salem.pack]);
-    localStorage.setItem('salemPackResetVersion', String(SALEM_PACK_RESET_VERSION));
   }
+  localStorage.setItem('salemPackResetVersion', String(SALEM_PACK_RESET_VERSION));
 
   const trips = getTripList();
   if (!trips.includes('salem')) { trips.unshift('salem'); saveTripList(trips); }
@@ -3421,8 +3428,10 @@ function openPasswordResetModal() {
   document.getElementById('pwreset-password').value = '';
   document.getElementById('pwreset-confirm').value = '';
   document.getElementById('pwreset-error').textContent = '';
-  document.getElementById('pwreset-overlay').classList.add('visible');
-  setTimeout(() => document.getElementById('pwreset-password').focus(), 100);
+  const overlay = document.getElementById('pwreset-overlay');
+  overlay.classList.add('visible');
+  // Don't yank focus back if the user already clicked into a field (e.g. the confirm box).
+  setTimeout(() => { if (!overlay.contains(document.activeElement)) document.getElementById('pwreset-password').focus(); }, 100);
 }
 
 async function submitPasswordReset() {

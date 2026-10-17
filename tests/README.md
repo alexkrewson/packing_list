@@ -62,19 +62,19 @@ content — only genuine behavior changes should break them.
 
 ## `BUG:`-prefixed tests
 
-A couple of tests are prefixed `BUG:` and document real, currently-shipping
-app behavior that looks unintentional, found while writing this suite:
+A test prefixed `BUG:` documents real, currently-shipping app behavior that
+looks unintentional, found while writing this suite:
 
 - `trips.spec.ts` — creating a trip doesn't persist it as the "last trip",
   so reloading right after creating one silently drops you back onto
   whatever trip was last explicitly selected.
-- `auth.spec.ts` — signing into an existing account on a browser that's
-  never run the app before overwrites that account's real cloud item
-  library with the hardcoded defaults (and re-syncs that clobber back up to
-  Supabase).
+
+(`auth.spec.ts` used to carry a second one: signing in on a fresh browser
+overwrote the account's cloud item library with the hardcoded defaults.
+Fixed 2026-10-16; that test now asserts the library survives.)
 
 These aren't flaky tests — they pass because they assert the *current* (bad)
-behavior. If either bug gets fixed, update the assertion (each has a comment
+behavior. If the bug gets fixed, update the assertion (each has a comment
 marking what should change) rather than deleting the test.
 
 ## Extending
