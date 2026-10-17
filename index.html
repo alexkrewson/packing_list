@@ -300,6 +300,9 @@ li.pending.checked .item-text{color:var(--text-secondary);}
 .auth-box h1{font-family:var(--font-display);font-weight:700;font-size:2.1rem;margin-bottom:0.3rem;color:var(--text-primary);}
 .auth-box p{font-size:0.82rem;color:var(--text-secondary);margin-bottom:1.8rem;line-height:1.5;}
 .auth-error{font-size:0.78rem;color:var(--danger-text);margin-top:0.5rem;min-height:1.2em;}
+.auth-error.ok{color:var(--success-text);}
+.auth-forgot{text-align:right;margin-top:-0.4rem;}
+.auth-forgot button{background:none;border:none;color:var(--accent);cursor:pointer;font-size:0.75rem;text-decoration:underline;padding:0.2rem 0;}
 .auth-toggle{font-size:0.78rem;color:var(--text-secondary);margin-top:1rem;text-align:center;}
 .auth-toggle button{background:none;border:none;color:var(--accent);cursor:pointer;font-size:0.78rem;text-decoration:underline;padding:0;}
 .auth-loading{text-align:center;padding:2rem;font-size:0.85rem;color:var(--text-secondary);}
@@ -380,6 +383,9 @@ kbd{font-family:var(--font-sans);font-size:0.75rem;background:rgba(var(--tint-rg
       <input id="auth-password" type="password" placeholder="••••••••" autocomplete="current-password"
              onkeydown="if(event.key==='Enter')authSignIn()">
     </div>
+    <div class="auth-forgot" id="auth-forgot-wrap">
+      <button type="button" id="auth-forgot-btn" onclick="authForgotPassword()">Forgot password?</button>
+    </div>
     <div id="auth-error" class="auth-error"></div>
     <div class="modal-btns" style="margin-top:1rem">
       <div class="right" style="width:100%;justify-content:space-between">
@@ -408,7 +414,7 @@ kbd{font-family:var(--font-sans);font-size:0.75rem;background:rgba(var(--tint-rg
           <button type="button" class="settings-section-toggle" onclick="toggleSettingsSection(event,this)">Account<span class="settings-section-chevron">▾</span></button>
           <div class="settings-section-body">
             <div class="profile-dd-item" onclick="openChangePasswordModal()">🔑 Change password</div>
-            <div class="profile-dd-item danger" onclick="authSignOut()">Sign out</div>
+            <div class="profile-dd-item" onclick="authSignOut()">🚪 Sign out</div>
           </div>
         </div>
         <div class="settings-section">
@@ -2518,10 +2524,29 @@ function toggleAuthMode() {
   document.getElementById('auth-mode-toggle').textContent = _authMode === 'signin' ? 'Create an account' : 'Sign in instead';
   document.getElementById('auth-signup-btn').style.display = _authMode === 'signup' ? '' : 'none';
   document.getElementById('auth-signin-btn').style.display = _authMode === 'signin' ? '' : 'none';
-  document.getElementById('auth-error').textContent = '';
+  document.getElementById('auth-forgot-wrap').style.display = _authMode === 'signin' ? '' : 'none';
+  _setAuthError('');
 }
 
-function _setAuthError(msg) { document.getElementById('auth-error').textContent = msg; }
+function _setAuthError(msg, ok = false) {
+  const el = document.getElementById('auth-error');
+  el.textContent = msg;
+  el.classList.toggle('ok', ok);
+}
+
+// Emails a reset link back to this page. Following it fires PASSWORD_RECOVERY
+// (see startup()), which signs the user in and opens the set-new-password modal.
+async function authForgotPassword() {
+  const email = document.getElementById('auth-email').value.trim();
+  if (!email) { _setAuthError('Enter your email above, then click Forgot password.'); return; }
+  const btn = document.getElementById('auth-forgot-btn');
+  btn.disabled = true;
+  _setAuthError('');
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+  btn.disabled = false;
+  if (error) { _setAuthError(error.message); return; }
+  _setAuthError(`If there's an account for ${email}, a reset link is on its way.`, true);
+}
 
 async function authSignIn() {
   const email = document.getElementById('auth-email').value.trim();
@@ -2544,9 +2569,9 @@ async function authSignUp() {
   const btn = document.getElementById('auth-signup-btn');
   btn.textContent = 'Creating…'; btn.disabled = true;
   _setAuthError('');
-  // The Supabase project's Site URL is shared with other apps, so say where the
-  // confirmation link should land. Must be in Auth → URL Configuration → Redirect
-  // URLs, or Supabase falls back to the Site URL.
+  // Send the confirmation link back to this page rather than relying on the
+  // project's Site URL. Must be in Auth → URL Configuration → Redirect URLs, or
+  // Supabase falls back to the Site URL.
   const { data, error } = await sb.auth.signUp({
     email, password, options: { emailRedirectTo: location.origin + location.pathname },
   });
@@ -2554,9 +2579,7 @@ async function authSignUp() {
   if (error) { _setAuthError(error.message); return; }
   if (data.user && !data.session) {
     // Email confirmation required
-    const errEl = document.getElementById('auth-error');
-    errEl.style.color = 'var(--success-text)';
-    errEl.textContent = 'Check your email to confirm your account, then sign in.';
+    _setAuthError('Check your email to confirm your account, then sign in.', true);
     return;
   }
   await onAuthSuccess(data.user);
