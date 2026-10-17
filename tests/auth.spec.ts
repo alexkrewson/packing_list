@@ -39,6 +39,35 @@ test.describe('sign in', () => {
   });
 });
 
+test.describe('forgot password', () => {
+  test('sends a reset email that links back to this page, and says so', async ({ mockPage, fakeSupabase }) => {
+    fakeSupabase.seedUser('forgot@example.com', 'password123');
+    await mockPage.goto('/trips-app.html');
+    await mockPage.locator('#auth-email').fill('forgot@example.com');
+    await mockPage.locator('#auth-forgot-btn').click();
+    await expect(mockPage.locator('#auth-error')).toHaveClass(/ok/);
+    await expect(mockPage.locator('#auth-error')).toContainText('reset link is on its way');
+    expect(fakeSupabase.recoverRequests).toEqual([
+      { email: 'forgot@example.com', redirectTo: expect.stringMatching(/\/trips-app\.html$/) },
+    ]);
+  });
+
+  test('asks for the email first instead of sending anything', async ({ mockPage, fakeSupabase }) => {
+    await mockPage.goto('/trips-app.html');
+    await mockPage.locator('#auth-forgot-btn').click();
+    await expect(mockPage.locator('#auth-error')).toContainText('Enter your email');
+    await expect(mockPage.locator('#auth-error')).not.toHaveClass(/ok/);
+    expect(fakeSupabase.recoverRequests).toHaveLength(0);
+  });
+
+  test('is hidden in create-account mode', async ({ mockPage }) => {
+    await mockPage.goto('/trips-app.html');
+    await expect(mockPage.locator('#auth-forgot-btn')).toBeVisible();
+    await mockPage.locator('#auth-mode-toggle').click();
+    await expect(mockPage.locator('#auth-forgot-btn')).toBeHidden();
+  });
+});
+
 test.describe('sign up', () => {
   test('a short password is rejected client-side', async ({ mockPage }) => {
     await mockPage.goto('/trips-app.html');

@@ -46,6 +46,8 @@ const PRIMARY_KEYS: Record<string, string[]> = {
  */
 export class FakeSupabase {
   users: FakeUser[] = [];
+  /** Password-reset emails the app asked for (POST /auth/v1/recover). */
+  recoverRequests: { email: string; redirectTo: string | null }[] = [];
   tables: Record<string, any[]> = {
     master_items: [],
     master_cats: [],
@@ -118,6 +120,7 @@ export class FakeSupabase {
     }
 
     if (url.pathname.endsWith('/recover') && method === 'POST') {
+      this.recoverRequests.push({ email: this.postBody(route).email, redirectTo: url.searchParams.get('redirect_to') });
       return route.fulfill({ status: 200, json: {} });
     }
 
