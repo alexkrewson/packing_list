@@ -11,6 +11,11 @@ to have them re-applied to this project.
 Single-file app: `trips-app.html`, vanilla JS, Supabase via the UMD bundle.
 No build step. `npm install` exists only for the Playwright tests.
 
+Live at https://trip.trolleysolution.com: GitHub Pages, deployed by
+`.github/workflows/deploy.yml` on every push to `main` (it copies the file to
+`index.html` and writes the CNAME). DNS is a DNS-only `trip` CNAME in
+Cloudflare. The old `alexkrewson.github.io/packing_list/` redirects there.
+
 Tables are still `public.master_items` / `public.master_cats` — moving them to
 a `packing_lists.*` schema is an open item in `apps-shared/todo.md`. Auth is
 shared with every other app in that Supabase project.
