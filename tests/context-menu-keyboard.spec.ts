@@ -113,6 +113,26 @@ test.describe('pool item context menu keyboard shortcuts', () => {
   });
 });
 
+test.describe('context menu label rendering', () => {
+  // Regression: .ctx-item used to be display:flex with a gap, which made the
+  // underlined shortcut letter its own flex item — "Set p ending", "C heck".
+  test('the underlined shortcut letter sits flush against the rest of its word', async ({ localPage }) => {
+    const menu = await openItemMenu(localPage, 'Keys');
+    const gaps = await menu.locator('.ctx-item').evaluateAll((items) =>
+      items.map((item) => {
+        const u = item.querySelector('u');
+        const after = u?.nextSibling;
+        if (!u || !after || after.nodeType !== Node.TEXT_NODE) return 0;
+        const range = document.createRange();
+        range.setStart(after, 0);
+        range.setEnd(after, 1);
+        return range.getBoundingClientRect().left - u.getBoundingClientRect().right;
+      }),
+    );
+    for (const gap of gaps) expect(Math.abs(gap)).toBeLessThan(1);
+  });
+});
+
 test.describe('context menu dismissal', () => {
   test('Escape closes an open context menu', async ({ localPage }) => {
     await openItemMenu(localPage, 'Keys');

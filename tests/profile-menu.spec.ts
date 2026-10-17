@@ -10,10 +10,10 @@ test.beforeEach(async ({ authedPage }) => {
   await createTrip(authedPage, 'Profile Menu Trip');
 });
 
-// Both dropdown sections ("Account", "Advanced") are collapsed by default
+// The dropdown sections ("Account", "Theme", "Advanced") are collapsed by default
 // (`.settings-section-body{display:none}` until the section gets `.open`),
 // so every item lives behind an expand click first.
-async function openProfileMenu(page: import('@playwright/test').Page, section: 'Account' | 'Advanced') {
+async function openProfileMenu(page: import('@playwright/test').Page, section: 'Account' | 'Theme' | 'Advanced') {
   await page.locator('#profile-btn').click();
   await expect(page.locator('#profile-dropdown')).toBeVisible();
   await page.locator('.settings-section-toggle', { hasText: section }).click();
@@ -96,6 +96,49 @@ test.describe('settings / profile dropdown', () => {
       await authedPage.locator('.profile-dd-item', { hasText: 'Paste JSON' }).click();
       await expect(authedPage.locator('.inline-tooltip.error')).toContainText('not valid JSON');
     });
+  });
+
+  test('Escape closes the settings dropdown', async ({ authedPage }) => {
+    await authedPage.locator('#profile-btn').click();
+    await expect(authedPage.locator('#profile-dropdown')).toBeVisible();
+    await authedPage.keyboard.press('Escape');
+    await expect(authedPage.locator('#profile-dropdown')).toBeHidden();
+  });
+
+  test('Theme switches to light, persists across reload, and switches back', async ({ authedPage }) => {
+    const html = authedPage.locator('html');
+    await expect(html).not.toHaveAttribute('data-theme', 'light');
+    await openProfileMenu(authedPage, 'Theme');
+    await expect(authedPage.locator('.theme-option[data-theme-key="dark"]')).toHaveClass(/active/);
+    await authedPage.locator('.theme-option', { hasText: 'Light' }).click();
+    await expect(html).toHaveAttribute('data-theme', 'light');
+    const canvas = () => authedPage.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    expect(await canvas()).toBe('rgb(248, 250, 252)');
+
+    await authedPage.reload();
+    await expect(html).toHaveAttribute('data-theme', 'light');
+    await openProfileMenu(authedPage, 'Theme');
+    await expect(authedPage.locator('.theme-option[data-theme-key="light"]')).toHaveClass(/active/);
+    await authedPage.locator('.theme-option', { hasText: 'Dark' }).click();
+    await expect(html).not.toHaveAttribute('data-theme', 'light');
+    expect(await canvas()).toBe('rgb(30, 21, 8)');
+  });
+
+  test('About opens from the menu, navigates by section, and closes with Escape', async ({ authedPage }) => {
+    await authedPage.locator('#profile-btn').click();
+    await authedPage.locator('#about-link').click();
+    await expect(authedPage.locator('#about-modal')).toHaveClass(/visible/);
+    await expect(authedPage.locator('#profile-dropdown')).toBeHidden();
+    const firstLink = authedPage.locator('.about-nav-link').first();
+    await expect(firstLink).toHaveClass(/about-nav-link--active/);
+
+    const keysLink = authedPage.locator('.about-nav-link', { hasText: 'Keyboard shortcuts' });
+    await keysLink.click();
+    await expect(keysLink).toHaveClass(/about-nav-link--active/);
+    await expect(authedPage.locator('#about-keys h3')).toBeInViewport();
+
+    await authedPage.keyboard.press('Escape');
+    await expect(authedPage.locator('#about-modal')).not.toHaveClass(/visible/);
   });
 
   test('Sign out returns to the login form', async ({ authedPage }) => {

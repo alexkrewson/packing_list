@@ -6,6 +6,10 @@
 <title>Trip Planner</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+// Apply the saved theme before first paint so light mode doesn't flash dark.
+try { if (localStorage.getItem('theme') === 'light') document.documentElement.dataset.theme = 'light'; } catch (e) {}
+</script>
 <style>
 :root {
   /* Surfaces — "Ember" theme: deep amber-black canvas with layered elevation */
@@ -40,6 +44,28 @@
 
   /* App-specific: default "waiting on task" tint before a task color is picked */
   --pending:#5b9bd5; --pending-bg:rgba(91,155,213,0.10);
+
+  /* App-specific: RGB of the subtle hover/chip tint — white on dark, slate on light */
+  --tint-rgb: 255,255,255;
+  color-scheme: dark;
+}
+
+/* Light mode — explicit opt-in (Settings → Theme), values from apps-shared css-best-practices */
+[data-theme="light"] {
+  --bg-canvas:  #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-raised:  #ffffff;
+  --border:     #e2e8f0;
+  --border-strong: #cbd5e1;
+  --text-primary:   #0f172a;
+  --text-secondary: #64748b;
+  --text-tertiary:  #94a3b8;
+  --text-on-accent: #0f172a;
+  --success-bg: #f0fdf4; --success-text: #166534;
+  --danger-bg:  #fef2f2; --danger-text:  #991b1b;
+  --warning-bg: #fff7ed; --warning-text: #9a3412;
+  --tint-rgb: 15,23,42;
+  color-scheme: light;
 }
 *{margin:0;padding:0;box-sizing:border-box;}
 body{background:var(--bg-canvas);color:var(--text-primary);font-family:var(--font-sans);min-height:100vh;padding:1.5rem 1.5rem 3rem;}
@@ -99,7 +125,7 @@ body{background:var(--bg-canvas);color:var(--text-primary);font-family:var(--fon
 ul{list-style:none;border-left:1.5px solid var(--border);padding-left:1rem;}
 li{font-size:0.88rem;font-weight:300;color:var(--text-primary);padding:0.3rem 0.2rem;border-bottom:1px dotted var(--border);display:flex;align-items:center;gap:0.6rem;line-height:1.4;cursor:pointer;border-radius:3px;transition:background 0.15s;user-select:none;}
 li:last-child{border-bottom:none;}
-li:hover{background:rgba(255,255,255,0.04);}
+li:hover{background:rgba(var(--tint-rgb),0.04);}
 .cb{display:inline-block;width:14px;height:14px;min-width:14px;border:1.5px solid var(--text-secondary);border-radius:2px;flex-shrink:0;position:relative;transition:background 0.15s,border-color 0.15s;}
 .cb::after{content:'';position:absolute;left:3px;top:0;width:5px;height:9px;border:2px solid white;border-top:none;border-left:none;transform:rotate(40deg) scale(0);transition:transform 0.15s cubic-bezier(.4,0,.2,1);}
 li.checked .cb{background:var(--success);border-color:var(--success);}
@@ -120,7 +146,7 @@ li.pending.checked .item-text{color:var(--text-secondary);}
 .pending-radio-list{max-height:200px;overflow-y:auto;margin:0.5rem 0 0.8rem;border:1px solid var(--border);border-radius:6px;}
 .pending-radio-item{display:flex;align-items:center;gap:0.6rem;padding:0.42rem 0.7rem;border-bottom:1px dotted var(--border);cursor:pointer;font-size:0.84rem;font-weight:300;transition:background 0.1s;}
 .pending-radio-item:last-child{border-bottom:none;}
-.pending-radio-item:hover{background:rgba(255,255,255,0.035);}
+.pending-radio-item:hover{background:rgba(var(--tint-rgb),0.035);}
 .pending-radio-item input[type=radio]{accent-color:var(--pending);width:13px;height:13px;flex-shrink:0;cursor:pointer;}
 .pending-empty{font-size:0.82rem;color:var(--text-secondary);font-style:italic;padding:0.75rem 0.7rem;}
 .custom-badge{font-size:0.6rem;font-weight:600;letter-spacing:0.05em;background:var(--accent-glow);color:var(--accent);border-radius:3px;padding:0.1rem 0.3rem;flex-shrink:0;text-transform:uppercase;}
@@ -135,7 +161,7 @@ li.pending.checked .item-text{color:var(--text-secondary);}
 .add-sugg-item:hover,.add-sugg-item.focused{background:var(--accent-glow);}
 .add-sugg-item.is-active{opacity:0.4;cursor:default;}
 .add-sugg-name{font-weight:300;color:var(--text-primary);flex:1;}
-.add-sugg-cat{font-size:0.6rem;color:var(--text-secondary);background:rgba(255,255,255,0.06);border-radius:3px;padding:0.06rem 0.3rem;flex-shrink:0;}
+.add-sugg-cat{font-size:0.6rem;color:var(--text-secondary);background:rgba(var(--tint-rgb),0.06);border-radius:3px;padding:0.06rem 0.3rem;flex-shrink:0;}
 .add-input{flex:1;font-family:var(--font-sans);font-size:0.88rem;font-weight:300;background:none;border:none;border-bottom:1px solid var(--accent);outline:none;color:var(--text-primary);padding:0.1rem 0;}
 .add-confirm{font-size:0.75rem;background:none;border:none;cursor:pointer;color:var(--success-text);font-weight:500;padding:0.1rem 0.3rem;}
 .add-cancel{font-size:0.75rem;background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:0.1rem 0.3rem;}
@@ -155,8 +181,8 @@ li.pending.checked .item-text{color:var(--text-secondary);}
 .pool-ul{list-style:none;border-left:1.5px dashed var(--border-strong);padding-left:0.9rem;}
 .pool-li{font-size:0.84rem;font-weight:300;color:var(--text-secondary);padding:0.25rem 0.2rem;border-bottom:1px dotted var(--border-strong);display:flex;align-items:center;gap:0.5rem;cursor:default;border-radius:3px;transition:background 0.15s;user-select:none;}
 .pool-li:last-child{border-bottom:none;}
-.pool-li:hover{background:rgba(255,255,255,0.03);}
-.pool-source{font-size:0.62rem;color:var(--text-tertiary);background:rgba(255,255,255,0.05);border-radius:3px;padding:0.08rem 0.3rem;flex-shrink:0;}
+.pool-li:hover{background:rgba(var(--tint-rgb),0.03);}
+.pool-source{font-size:0.62rem;color:var(--text-tertiary);background:rgba(var(--tint-rgb),0.05);border-radius:3px;padding:0.08rem 0.3rem;flex-shrink:0;}
 
 /* All done */
 .all-done{display:none;text-align:center;margin-top:1.5rem;padding:0.8rem;background:var(--success-bg);border:1px solid rgba(34,197,94,0.3);border-radius:8px;font-family:var(--font-display);font-weight:700;color:var(--success-text);font-size:1.15rem;}
@@ -171,8 +197,9 @@ li.pending.checked .item-text{color:var(--text-secondary);}
 /* Context menu */
 .ctx-menu{position:fixed;background:var(--bg-raised);border:1px solid var(--border);border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,0.35);z-index:1000;overflow:hidden;min-width:170px;animation:ctxFade 0.1s ease;}
 @keyframes ctxFade{from{opacity:0;transform:scale(0.95)}to{opacity:1;transform:scale(1)}}
-.ctx-item{padding:0.55rem 1rem;font-size:0.82rem;cursor:pointer;color:var(--text-primary);display:flex;align-items:center;gap:0.5rem;transition:background 0.1s;}
-.ctx-item:hover{background:rgba(255,255,255,0.06);}
+/* Block, not flex: labels are "icon <u>L</u>abel" text runs, and flex would make the <u> its own item and gap it away from the rest of the word */
+.ctx-item{padding:0.55rem 1rem;font-size:0.82rem;cursor:pointer;color:var(--text-primary);white-space:nowrap;transition:background 0.1s;}
+.ctx-item:hover{background:rgba(var(--tint-rgb),0.06);}
 .ctx-item.danger{color:var(--danger-text);}
 .ctx-divider{height:1px;background:var(--border);margin:0.2rem 0;}
 
@@ -213,7 +240,7 @@ li.pending.checked .item-text{color:var(--text-secondary);}
 .tag-added{background:var(--success-bg);color:var(--success-text);}
 .tag-removed{background:var(--danger-bg);color:var(--danger-text);}
 .tag-checked{background:var(--success-bg);color:var(--success-text);}
-.edits-cat{font-size:0.68rem;color:var(--text-secondary);background:rgba(255,255,255,0.06);border-radius:3px;padding:0.1rem 0.35rem;flex-shrink:0;}
+.edits-cat{font-size:0.68rem;color:var(--text-secondary);background:rgba(var(--tint-rgb),0.06);border-radius:3px;padding:0.1rem 0.35rem;flex-shrink:0;}
 .edits-empty{font-size:0.85rem;color:var(--text-secondary);font-style:italic;}
 .edits-json-wrap{margin-top:1rem;flex-shrink:0;border-top:1px solid var(--border);padding-top:0.8rem;}
 .edits-json-label{font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-secondary);margin-bottom:0.4rem;display:flex;justify-content:space-between;align-items:center;}
@@ -233,7 +260,7 @@ li.pending.checked .item-text{color:var(--text-secondary);}
 .suggest-list{overflow-y:auto;flex:1;margin-bottom:1rem;}
 .suggest-item{display:flex;align-items:center;gap:0.6rem;padding:0.45rem 0.3rem;border-bottom:1px dotted var(--border);cursor:pointer;border-radius:3px;transition:background 0.12s;}
 .suggest-item:last-child{border-bottom:none;}
-.suggest-item:hover{background:rgba(255,255,255,0.04);}
+.suggest-item:hover{background:rgba(var(--tint-rgb),0.04);}
 .suggest-item input[type=checkbox]{accent-color:var(--success);width:15px;height:15px;flex-shrink:0;cursor:pointer;}
 .suggest-item-text{font-size:0.86rem;font-weight:300;flex:1;}
 .suggest-divider{font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-secondary);margin:0.8rem 0 0.4rem;font-weight:500;}
@@ -247,7 +274,7 @@ li.pending.checked .item-text{color:var(--text-secondary);}
 
 /* Color palette (edit-task modal) */
 .color-palette{display:flex;flex-wrap:wrap;gap:0.5rem;margin-top:0.3rem;}
-.color-swatch{width:22px;height:22px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);transition:transform 0.1s,border-color 0.1s;}
+.color-swatch{width:22px;height:22px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0;box-shadow:inset 0 0 0 1px rgba(var(--tint-rgb),0.15);transition:transform 0.1s,border-color 0.1s;}
 .color-swatch:hover{transform:scale(1.12);}
 .color-swatch.selected{border-color:var(--text-primary);}
 .color-swatch.auto{background:var(--bg-canvas);color:var(--text-secondary);font-size:0.65rem;font-weight:600;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1.5px var(--border);}
@@ -291,8 +318,40 @@ li.pending.checked .item-text{color:var(--text-secondary);}
 .settings-section.open .settings-section-body{display:block;}
 .settings-section.open .settings-section-chevron{transform:rotate(180deg);}
 .profile-dd-item{padding:0.55rem 1rem;min-height:44px;font-size:0.82rem;cursor:pointer;color:var(--text-primary);display:flex;align-items:center;gap:0.5rem;transition:background 0.1s;border-radius:6px;}
-.profile-dd-item:hover{background:rgba(255,255,255,0.06);}
+.profile-dd-item:hover{background:rgba(var(--tint-rgb),0.06);}
 .profile-dd-item.danger{color:var(--danger-text);}
+.theme-option .theme-check{margin-left:auto;color:var(--accent);visibility:hidden;}
+.theme-option.active .theme-check{visibility:visible;}
+
+/* About page — opened from Settings → About */
+.about-overlay{padding:0;}
+.about-box{display:flex;flex-direction:column;width:100%;max-width:880px;height:min(640px,100vh);background:var(--bg-raised);border-radius:10px;box-shadow:0 20px 60px rgba(0,0,0,0.4);overflow:hidden;}
+@media(max-width:600px){.about-box{height:100vh;border-radius:0;}}
+.about-topbar{display:flex;align-items:center;gap:0.6rem;padding:0.6rem 0.75rem;border-bottom:1px solid var(--border);}
+.about-topbar h2{font-family:var(--font-display);font-size:1.3rem;font-weight:700;flex:1;}
+.about-icon-btn{background:none;border:1px solid var(--border);border-radius:6px;color:var(--text-secondary);cursor:pointer;min-width:36px;min-height:36px;font-size:0.9rem;transition:color 0.15s,border-color 0.15s;}
+.about-icon-btn:hover{color:var(--text-primary);border-color:var(--border-strong);}
+.about-page{display:flex;align-items:flex-start;flex:1;min-height:0;overflow:hidden;}
+.about-nav{flex-shrink:0;width:200px;height:100%;overflow-y:auto;border-right:1px solid var(--border);padding:1rem 0;transition:width 0.2s ease;}
+.about-nav--collapsed{width:0;border-right:none;}
+.about-nav-link{display:block;width:100%;background:none;border:none;cursor:pointer;font-size:0.8rem;color:var(--text-secondary);padding:0.3rem 0.75rem;text-align:left;white-space:nowrap;}
+.about-nav-link:hover{color:var(--text-primary);}
+.about-nav-link--active{color:var(--text-primary);font-weight:600;}
+.about-scroll{position:relative;flex:1;height:100%;overflow-y:auto;padding:1rem 1.5rem 3rem;font-size:0.86rem;line-height:1.6;color:var(--text-primary);}
+.about-scroll section{margin-bottom:1.75rem;}
+/* Lets every section scroll to the top of the pane, so nav clicks and the scrollspy agree */
+.about-scroll section:last-child{min-height:100%;margin-bottom:0;}
+.about-scroll h3{font-family:var(--font-display);font-size:1.15rem;font-weight:700;margin-bottom:0.4rem;color:var(--accent);}
+.about-scroll p,.about-scroll li{color:var(--text-secondary);}
+.about-scroll p + p{margin-top:0.5rem;}
+.about-scroll ul{border-left:none;padding-left:1.1rem;list-style:disc;}
+.about-scroll li{display:list-item;border-bottom:none;padding:0.1rem 0;cursor:default;font-weight:400;font-size:0.86rem;}
+.about-scroll li:hover{background:none;}
+.about-scroll strong{color:var(--text-primary);font-weight:600;}
+.about-keys{border-collapse:collapse;width:100%;margin-top:0.4rem;}
+.about-keys td{padding:0.25rem 0.5rem;border-bottom:1px dotted var(--border);color:var(--text-secondary);vertical-align:top;}
+.about-keys td:first-child{width:7rem;color:var(--text-primary);white-space:nowrap;}
+kbd{font-family:var(--font-sans);font-size:0.75rem;background:rgba(var(--tint-rgb),0.08);border:1px solid var(--border-strong);border-radius:4px;padding:0 0.35rem;color:var(--text-primary);}
 
 /* Password reset overlay */
 .pwreset-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9500;display:none;align-items:center;justify-content:center;padding:1.5rem;}
@@ -353,6 +412,14 @@ li.pending.checked .item-text{color:var(--text-secondary);}
           </div>
         </div>
         <div class="settings-section">
+          <button type="button" class="settings-section-toggle" onclick="toggleSettingsSection(event,this)">Theme<span class="settings-section-chevron">▾</span></button>
+          <div class="settings-section-body">
+            <div class="profile-dd-item theme-option" data-theme-key="dark" onclick="setTheme('dark')">🌙 Dark<span class="theme-check">✓</span></div>
+            <div class="profile-dd-item theme-option" data-theme-key="light" onclick="setTheme('light')">☀️ Light<span class="theme-check">✓</span></div>
+          </div>
+        </div>
+        <div class="profile-dd-item" id="about-link" onclick="openAboutPage()">ℹ️ About</div>
+        <div class="settings-section">
           <button type="button" class="settings-section-toggle" onclick="toggleSettingsSection(event,this)">Advanced<span class="settings-section-chevron">▾</span></button>
           <div class="settings-section-body">
             <div class="profile-dd-item" onclick="openEditsModal()">📝 View edits</div>
@@ -403,6 +470,66 @@ li.pending.checked .item-text{color:var(--text-secondary);}
     <div class="panel-footer">
       <span class="count" id="todo-footer"></span>
       <button class="reset-btn" onclick="resetTab('todo')">Reset</button>
+    </div>
+  </div>
+</div>
+
+<!-- About page -->
+<div class="overlay about-overlay" id="about-modal">
+  <div class="about-box" role="dialog" aria-labelledby="about-title">
+    <div class="about-topbar">
+      <button class="about-icon-btn" type="button" onclick="toggleAboutNav()" title="Show/hide contents" aria-label="Show or hide contents">☰</button>
+      <h2 id="about-title">About Trip Planner</h2>
+      <button class="about-icon-btn" type="button" onclick="closeAllModals()" title="Close (Esc)" aria-label="Close">✕</button>
+    </div>
+    <div class="about-page">
+      <nav class="about-nav" id="about-nav"></nav>
+      <div class="about-scroll" id="about-scroll">
+        <section id="about-overview" data-title="Overview">
+          <h3>Overview</h3>
+          <p>Trip Planner keeps a packing list and a to-do list for each trip. Everything you add goes into one shared <strong>item library</strong>, so an item you add for one trip is ready to reuse on the next.</p>
+          <p>Pick a trip from the selector at the top, or start one with <strong>+ New Trip</strong>. A new trip starts with a small set of everyday items.</p>
+        </section>
+        <section id="about-packing" data-title="Packing list">
+          <h3>Packing list</h3>
+          <ul>
+            <li><strong>Click an item</strong> to check it off. The bar at the top shows how much is packed.</li>
+            <li><strong>Containers</strong> group items by where they're packed, such as a backpack or a box. Containers can sit inside other containers. Add one with <strong>+ Container</strong>, or turn an item into a container from its menu.</li>
+            <li><strong>+</strong> on a container header adds an item. Start typing to pick from the library.</li>
+            <li><strong>Reset</strong> unchecks everything on this list without removing any items.</li>
+          </ul>
+        </section>
+        <section id="about-todo" data-title="To-do list">
+          <h3>To-do list</h3>
+          <p>To-do tasks work the same way as packing items, but are grouped by category instead of container. You can give a task a highlight color. <strong>Add to-do task</strong> on a packing item suggests tasks related to that item.</p>
+        </section>
+        <section id="about-pending" data-title="Waiting on a task">
+          <h3>Waiting on a task</h3>
+          <p>Use <strong>Set pending</strong> on a packing item when you can't pack it until a to-do task is done, for example a jacket that's still at the dry cleaner. The item and its task share a color so they're easy to match up.</p>
+          <p>In <strong>Edit item info</strong> you can give a library item a default task, so it's flagged automatically whenever it's added to a trip.</p>
+        </section>
+        <section id="about-pool" data-title="Item pool">
+          <h3>Item pool</h3>
+          <p>Below each list, the <strong>Item Pool</strong> shows library items that aren't on this trip. Items that are on other trips show those trips' names. Right-click (or long-press) a pool item to add it back. <strong>Remove from list</strong> on an item sends it back to the pool. It stays in the library.</p>
+          <p><strong>Delete Permanently</strong> in the edit dialog removes an item from the library and every trip.</p>
+        </section>
+        <section id="about-keys" data-title="Keyboard shortcuts">
+          <h3>Keyboard shortcuts</h3>
+          <p>Right-click (or long-press) any item, container or pool item to open its menu. The underlined letter in each menu option is its shortcut.</p>
+          <table class="about-keys">
+            <tr><td>Packing item</td><td><kbd>c</kbd> check · <kbd>p</kbd> pending · <kbd>t</kbd> to-do task · <kbd>u</kbd> turn into container · <kbd>e</kbd> edit · <kbd>r</kbd> remove</td></tr>
+            <tr><td>To-do task</td><td><kbd>c</kbd> check · <kbd>e</kbd> edit · <kbd>r</kbd> remove</td></tr>
+            <tr><td>Container</td><td><kbd>r</kbd> rename · <kbd>d</kbd> delete</td></tr>
+            <tr><td>Pool item</td><td><kbd>a</kbd> add to this list · <kbd>e</kbd> edit</td></tr>
+            <tr><td>Anywhere</td><td><kbd>Esc</kbd> closes menus and dialogs</td></tr>
+            <tr><td>Add row</td><td><kbd>Enter</kbd> adds · <kbd>Esc</kbd> cancels</td></tr>
+          </table>
+        </section>
+        <section id="about-data" data-title="Sync &amp; settings">
+          <h3>Sync &amp; settings</h3>
+          <p>While you're signed in, trips and the item library sync to your account, so they follow you between devices. The gear menu has your account, the light/dark theme (saved on this device), and an <strong>Advanced</strong> section for viewing recent edits, copying or pasting the data as JSON, and finding duplicate items.</p>
+        </section>
+      </div>
     </div>
   </div>
 </div>
@@ -866,7 +993,7 @@ function _setCtxKeys(map) {
   document.addEventListener('keydown', ctxKeyHandler);
 }
 document.addEventListener('click', e=>{ if(ctxMenu&&!ctxMenu.contains(e.target))closeCtxMenu(); });
-document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeCtxMenu();closeAllModals();} });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeCtxMenu();closeAllModals();closeProfileMenu();} });
 
 function sk(trip, key) { return `trip:${trip}:${key}`; }
 function gs(trip, key, def) { try { const v=localStorage.getItem(sk(trip,key)); return v?JSON.parse(v):def; } catch(e){return def;} }
@@ -3223,6 +3350,64 @@ function toggleSettingsSection(e, btn) {
   btn.parentElement.classList.toggle('open');
 }
 document.addEventListener('click', () => closeProfileMenu());
+
+// ═══════════════════════════════════
+// THEME (dark default, explicit light opt-in; per-device, no account needed)
+// ═══════════════════════════════════
+function currentTheme() {
+  return document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+}
+function renderThemeOptions() {
+  const key = currentTheme();
+  document.querySelectorAll('.theme-option').forEach(el =>
+    el.classList.toggle('active', el.dataset.themeKey === key));
+}
+function setTheme(key) {
+  if (key === 'light') document.documentElement.dataset.theme = 'light';
+  else delete document.documentElement.dataset.theme;
+  try { localStorage.setItem('theme', key); } catch (e) {}
+  renderThemeOptions();
+}
+renderThemeOptions();
+
+// ═══════════════════════════════════
+// ABOUT PAGE
+// ═══════════════════════════════════
+function openAboutPage() {
+  closeProfileMenu();
+  const nav = document.getElementById('about-nav');
+  const scroll = document.getElementById('about-scroll');
+  if (!nav.children.length) {
+    scroll.querySelectorAll('section').forEach(sec => {
+      const link = document.createElement('button');
+      link.type = 'button';
+      link.className = 'about-nav-link';
+      link.textContent = sec.dataset.title;
+      link.dataset.target = sec.id;
+      link.onclick = () => { scroll.scrollTop = sec.offsetTop; };
+      nav.appendChild(link);
+    });
+    scroll.addEventListener('scroll', updateAboutNav);
+  }
+  // Phone width: start with the contents hidden so the text gets the full width.
+  nav.classList.toggle('about-nav--collapsed', window.innerWidth <= 600);
+  document.getElementById('about-modal').classList.add('visible');
+  scroll.scrollTop = 0;
+  updateAboutNav();
+}
+function toggleAboutNav() {
+  document.getElementById('about-nav').classList.toggle('about-nav--collapsed');
+}
+// Scrollspy: highlight the last section whose top has reached the top of the pane.
+function updateAboutNav() {
+  const scroll = document.getElementById('about-scroll');
+  const line = scroll.scrollTop + 24;
+  const sections = [...scroll.querySelectorAll('section')];
+  let active = sections[0];
+  sections.forEach(sec => { if (sec.offsetTop <= line) active = sec; });
+  document.querySelectorAll('.about-nav-link').forEach(l =>
+    l.classList.toggle('about-nav-link--active', l.dataset.target === active.id));
+}
 
 function openChangePasswordModal() {
   closeProfileMenu();

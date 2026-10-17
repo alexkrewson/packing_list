@@ -29,7 +29,7 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: `python3 -m http.server ${PORT} --bind 127.0.0.1`,
+    command: `node tests/helpers/static-server.mjs ${PORT}`,
     url: `http://127.0.0.1:${PORT}/trips-app.html`,
     reuseExistingServer: !process.env.CI,
     stdout: 'ignore',

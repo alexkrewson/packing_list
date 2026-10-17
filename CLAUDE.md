@@ -21,7 +21,7 @@ shared with every other app in that Supabase project.
 npm test · npm run test:ui · npm run test:headed · npm run report
 ```
 
-**`playwright.config.ts` serves the app with `python3 -m http.server`, which
-does not work on Windows** — `python3` there is a 0-byte Microsoft Store stub,
-so it opens the Store instead of serving. Real Python installs `python.exe`
-only. Needs a cross-platform fix before the suite runs off Linux.
+`playwright.config.ts` serves the app with `tests/helpers/static-server.mjs`
+(plain Node, no dependency) so the suite runs the same on Windows and Linux.
+Don't switch it back to `python3 -m http.server`: on Windows `python3` is a
+Microsoft Store stub.
